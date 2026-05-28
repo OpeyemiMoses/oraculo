@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Toast from "./Toast.jsx";
 import NetworkSwitcher from "./NetworkSwitcher.jsx";
 import { useNetwork } from "../context/NetworkContext.jsx";
+import { useSwitchChain } from "wagmi";
 
 function getDetectedWallets() {
   if (typeof window === "undefined") return [];
@@ -18,7 +19,7 @@ function getDetectedWallets() {
     { id: "rabby",     name: "Rabby Wallet",     icon: "/images/rabby.png",     getProvider: () => providers.find(p => p.isRabby) || null },
     { id: "phantom",   name: "Phantom",          icon: "/images/phantom.png",   getProvider: () => window.phantom?.ethereum || providers.find(p => p.isPhantom) || null },
   ];
-
+const { switchChain } = useSwitchChain();
   const detected = walletChecks
     .map(w => ({ ...w, provider: w.getProvider() }))
     .filter(w => w.provider);
@@ -67,14 +68,14 @@ export default function Navbar() {
     setWalletModalOpen(true);
   }
 
-  function connectWallet(wallet) {
-    const connector =
-      connectors.find(item => item.id === wallet.id) ||
-      connectors.find(item => item.name === wallet.name) ||
-      connectors[0];
-    connect({ connector });
-    setWalletModalOpen(false);
-  }
+function connectWallet(wallet) {
+  const connector =
+    connectors.find(item => item.id === wallet.id) ||
+    connectors.find(item => item.name === wallet.name) ||
+    connectors[0];
+  connect({ connector, chainId: 1952 });
+  setWalletModalOpen(false);
+}
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -86,6 +87,14 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  
+  useEffect(() => {
+  if (isConnected && !prevConnected.current) {
+    setToast({ message: "Wallet connected successfully", type: "success" });
+    switchChain?.({ chainId: 1952 });
+  }
+  prevConnected.current = isConnected;
+}, [isConnected]);
 
   return (
     <>
