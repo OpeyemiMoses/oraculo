@@ -1,0 +1,22 @@
+{
+  "name": "oraculo-backend",
+  "version": "1.0.0",
+  "description": "Oráculo World Cup AI prediction market backend",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.16.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.16.0",
+    "express": "^5.2.1",
+    "groq-sdk": "^1.2.0"
+  }
+}
