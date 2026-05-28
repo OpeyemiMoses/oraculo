@@ -345,7 +345,7 @@ if (result.existingMarket && !result.marketCreated) {
          <div style={{ marginTop: 40, padding: 16, background: "var(--bg3)", border: "1px solid #2a2200", borderRadius: 10, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <span style={{ fontSize: 16 }}>⚠️</span>
         <p style={{ fontSize: 12, color: "#a08030", lineHeight: 1.7, margin: 0 }}>
-          <strong style={{ color: "#d4a017" }}>Testnet Mode:</strong> You're in Testnet Mode — all matches will be simulated by AI, based on the AI confidence level. No real funds are at risk.
+          <strong style={{ color: "#d4a017" }}>Testnet Mode:</strong> You're in Testnet Mode — all matches will be simulated by AI, based on Live Player and Country. No real funds are at risk.
         </p>
       </div>
     </div>
