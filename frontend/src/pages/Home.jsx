@@ -48,11 +48,13 @@ useEffect(() => {
     .then(r => r.json())
     .then(d => {
       const all = d.markets || [];
-      const liveMarkets = all.filter(m => getMarketDisplay(m).isLiveListItem);
-      const activeOpen = all.filter(m => getMarketDisplay(m).isActiveBettable);
-      const pool = all.reduce((acc, m) => acc + getMarketPool(m), 0);
+      const [allMarkets, setAllMarkets] = useState([]);
+  const liveMarkets = all.filter(m => getMarketDisplay(m).isLiveListItem);
+const activeOpen = all.filter(m => getMarketDisplay(m).isActiveBettable);
+const pool = all.reduce((acc, m) => acc + getMarketPool(m), 0);
 
-      setMarkets(liveMarkets.slice(0, 6));
+setMarkets(liveMarkets.slice(0, 6));
+setAllMarkets(all); // keep all markets for duplicate checking
     const resolved = all.filter(m => m.status === "Resolved");
 const agentWins = resolved.filter(m => m.agentCorrect).length;
 const accuracy = resolved.length > 0 ? Math.round((agentWins / resolved.length) * 100) : null;
@@ -79,12 +81,13 @@ setStats({
       });
       const data = await res.json();
       setResult(data);
-      if (data.canCreateMarket && data.marketQuestion) {
-  const duplicate = markets.find(m =>
+if (data.canCreateMarket && data.marketQuestion) {
+  const duplicate = allMarkets.find(m =>
     m.question?.toLowerCase().trim() === data.marketQuestion?.toLowerCase().trim()
   );
   if (duplicate) {
     setResult({ ...data, existingMarket: duplicate, canCreateMarket: false });
+    setLoading(false);
     return;
   }
 }
