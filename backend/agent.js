@@ -31,8 +31,27 @@ CLASSIFICATION RULES:
 2026 World Cup teams: USA, Mexico, Canada, Brazil, Argentina, France, England, Germany, Spain, Portugal, Netherlands, Belgium, Morocco, Nigeria, Senegal, Ghana, Egypt, Cameroon, Japan, South Korea, Australia, Saudi Arabia, Iran, Uruguay, Colombia, Ecuador, Chile, Peru, Croatia, Switzerland, Denmark, Sweden, Poland, Serbia, Czech Republic, Wales, Qatar, Ivory Coast, Algeria, Tunisia.
 
 COUNTRY DETECTION: detect which country or player nationality the question is about.
-Use ISO 3166-1 alpha-2 codes: br=Brazil, fr=France, ar=Argentina, de=Germany, es=Spain, pt=Portugal, ng=Nigeria, gb-eng=England, us=USA, jp=Japan, ma=Morocco, mx=Mexico, nl=Netherlands, be=Belgium, hr=Croatia, se=Sweden, pl=Poland, rs=Serbia, ch=Switzerland, dk=Denmark, au=Australia, sa=Saudi Arabia, ir=Iran, uy=Uruguay, co=Colombia, ec=Ecuador, cl=Chile, pe=Peru, sn=Senegal, gh=Ghana, eg=Egypt, cm=Cameroon, ci=Ivory Coast, dz=Algeria, tn=Tunisia, kr=South Korea, ca=Canada, qa=Qatar, rs=Serbia.
-If no specific country detected, return null.
+Use ISO 3166-1 alpha-2 codes: br=Brazil, fr=France, ar=Argentina, de=Germany, es=Spain, pt=Portugal, ng=Nigeria, gb-eng=England, us=USA, jp=Japan, ma=Morocco, mx=Mexico, nl=Netherlands, be=Belgium, hr=Croatia, se=Sweden, pl=Poland, rs=Serbia, ch=Switzerland, dk=Denmark, au=Australia, sa=Saudi Arabia, ir=Iran, uy=Uruguay, co=Colombia, ec=Ecuador, cl=Chile, pe=Peru, sn=Senegal, gh=Ghana, eg=Egypt, cm=Cameroon, ci=Ivory Coast, dz=Algeria, tn=Tunisia, kr=South Korea, ca=Canada, qa=Qatar.
+
+PLAYER → COUNTRY mapping (always use the player's national team, NOT club team):
+Mbappe/Mbappé → fr | Griezmann/Thuram/Camavinga/Tchouameni/Maignan/Saliba → fr
+Messi/Di Maria/Dybala/Lautaro/Mac Allister/De Paul → ar
+Ronaldo/Cristiano/Bernardo Silva/Joao Felix/Diogo Jota/Cancelo/Leao → pt
+Kane/Bellingham/Saka/Rashford/Foden/Rice/Grealish → gb-eng
+Muller/Müller/Neuer/Musiala/Wirtz/Havertz/Kimmich/Kroos/Gundogan → de
+Pedri/Gavi/Yamal/Lamine/Morata/Olmo → es
+Neymar/Vinicius/Vini Jr/Rodrygo/Raphinha/Richarlison/Casemiro/Endrick → br
+Salah/Mo Salah → eg | Mane/Manè/Koulibaly/Ismaila Sarr → sn
+Osimhen/Lookman/Chukwueze/Ndidi → ng | Hakimi/Ziyech/Amrabat/En-Nesyri → ma
+Van Dijk/De Jong/Gakpo/Depay → nl | De Bruyne/Lukaku/Tielemans → be
+Modric/Modrić/Gvardiol/Brozovic → hr | Valverde/Darwin Nunez → uy
+Pulisic/Reyna/McKennie → us | Davies/Alphonso/Jonathan David → ca
+Mitoma/Kubo/Endo → jp | Son/Son Heung-min/Kim Min-Jae → kr
+Lewandowski/Szczesny → pl | Vlahovic/Tadic → rs | Eriksen/Hojlund → dk
+Xhaka/Shaqiri/Akanji → ch | Isak/Forsberg → se | Kudus/Partey → gh
+Mahrez/Bennacer → dz | Zaha/Kessie → ci | Anguissa/Choupo-Moting → cm
+James/Luis Diaz → co | Taremi/Azmoun → ir | Lozano/Ochoa → mx
+If no specific country or player detected, return null.
 
 RESPONSE — return ONLY valid JSON, no markdown:
 {
@@ -49,7 +68,8 @@ Rules:
 - canCreateMarket: false for NOT_WORLD_CUP and PAST_EVENT
 - confidencePct: 0 for NOT_WORLD_CUP and PAST_EVENT
 - For NOT_WORLD_CUP: end analysis with "This question is not related to the World Cup."
-- For PAST_EVENT: answer from historical data only`;
+- For PAST_EVENT: answer from historical data only
+- detectedCountry: ALWAYS use the player's NATIONAL team code, never their club country`;
 
   const groq = getGroqClient();
 
