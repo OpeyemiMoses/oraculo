@@ -168,19 +168,8 @@ export default function Market() {
     }
 
     // Expired with no bets
-   if (display.isEmptyExpired) {
-  return (
-    <div className="card" style={{ padding: 24, borderColor: "#2a2200" }}>
-      <div style={{ fontSize: 28, marginBottom: 10 }}>🏜️</div>
-      <p style={{ color: "#d4a017", fontWeight: 700, fontSize: 14, letterSpacing: "0.04em", marginBottom: 8 }}>
-        No bets were placed
-      </p>
-      <p style={{ color: "var(--text3)", fontSize: 13, lineHeight: 1.6 }}>
-        This market expired without anyone placing a bet. No funds were at risk and nothing was resolved — the market simply closed with an empty pool.
-      </p>
-    </div>
-  );
-}
+   
+    
 
     return null;
   }

@@ -40,6 +40,7 @@ export default function Home() {
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState(null);
   const [markets, setMarkets] = useState([]);
+  const [allMarkets, setAllMarkets] = useState([]);
   const [stats, setStats] = useState({ total: 0, open: 0, pool: "0" });
   const navigate = useNavigate();
 
@@ -47,9 +48,8 @@ useEffect(() => {
   fetch(`${API_URL}/markets`)
     .then(r => r.json())
     .then(d => {
-      const all = d.markets || [];
-      const [allMarkets, setAllMarkets] = useState([]);
-  const liveMarkets = all.filter(m => getMarketDisplay(m).isLiveListItem);
+    const all = d.markets || [];
+const liveMarkets = all.filter(m => getMarketDisplay(m).isLiveListItem);
 const activeOpen = all.filter(m => getMarketDisplay(m).isActiveBettable);
 const pool = all.reduce((acc, m) => acc + getMarketPool(m), 0);
 
@@ -81,13 +81,12 @@ setStats({
       });
       const data = await res.json();
       setResult(data);
-if (data.canCreateMarket && data.marketQuestion) {
-  const duplicate = allMarkets.find(m =>
+      if (data.canCreateMarket && data.marketQuestion) {
+  const duplicate = markets.find(m =>
     m.question?.toLowerCase().trim() === data.marketQuestion?.toLowerCase().trim()
   );
   if (duplicate) {
     setResult({ ...data, existingMarket: duplicate, canCreateMarket: false });
-    setLoading(false);
     return;
   }
 }
