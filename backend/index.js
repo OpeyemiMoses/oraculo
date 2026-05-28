@@ -39,7 +39,8 @@ let marketAnalysis = loadStorage();
 const STOPWORDS = new Set([
   "will", "the", "2026", "world", "cup", "during", "have", "this",
   "that", "with", "from", "for", "and", "but", "not", "are", "was",
-  "his", "her", "their", "team", "game", "match", "player"
+  "his", "her", "their", "team", "game", "match", "player",
+  "messi", "ronaldo", "neymar", "mbappe", "score", "play", "win"
 ]);
 
 function normalize(str) {
@@ -78,12 +79,12 @@ app.post("/ask", async (req, res) => {
       // Check open AND resolved markets for duplicates
       existingMarket = allMarkets.find(m =>
         (m.status === "Open" || m.status === "Resolved") &&
-        similarity(m.question, agentResult.marketQuestion) >= 0.7
+        similarity(m.question, agentResult.marketQuestion) >= 0.85
       ) || null;
 
       if (existingMarket) {
         carryOverConfidence = existingMarket.confidencePct;
-        agentResult.canCreateMarket = false; // block market creation
+        agentResult.canCreateMarket = false;
       }
     }
 
