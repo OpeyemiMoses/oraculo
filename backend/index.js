@@ -6,7 +6,13 @@ import { askAgent } from "./agent.js";
 import { createMarket, resolveMarket, cancelMarket, getAllMarkets, getMarket, getUserBets, getUserBalance } from "./chain.js";
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://oraculo-green.vercel.app",
+    "https://oraculo-2mk9coetd-yemigraffixs-projects.vercel.app",
+    "http://localhost:5173"
+  ]
+}));
 app.use(express.json());
 
 const XLAYER_EXPLORER = "https://www.oklink.com/xlayer-test";
