@@ -2,8 +2,8 @@ import "dotenv/config";
 import fs from "fs";
 import express from "express";
 import cors from "cors";
-import { askAgent } from "./Agent.js";
-import { createMarket, resolveMarket, cancelMarket, getAllMarkets, getMarket, getUserBets, getUserBalance } from "./Chain.js";
+import { askAgent } from "./agent.js";
+import { createMarket, resolveMarket, cancelMarket, getAllMarkets, getMarket, getUserBets, getUserBalance } from "./chain.js";
 
 const app = express();
 app.use(cors());
