@@ -37,6 +37,43 @@ export default function MyBets() {
     return () => { cancelled = true; };
   }, [address]);
 
+  // Mirrors _calculatePayout in OrauloFactory.sol exactly:
+  // grossWinShare = (stake * loserPool) / winnerPool
+  // fee           = grossWinShare * 2% (FEE_BPS = 200 / BPS = 10000)
+  // payout        = stake + grossWinShare - fee
+  //
+  // The backend returns all USDC values as formatted decimal strings (e.g. "12.340000")
+  // via ethers.formatUnits(value, 6). We convert them back to raw 6-decimal
+  // integer BigInts before doing fixed-point math so the result matches the contract.
+  function usdcStrToRaw(str) {
+    // Parse a USDC string like "12.34" or "12.340000" into raw BigInt (6 decimals)
+    const n = parseFloat(str);
+    if (isNaN(n)) return 0n;
+    return BigInt(Math.round(n * 1_000_000));
+  }
+
+  function calcPayout(bet, market) {
+    if (!market) return null;
+
+    const stake      = usdcStrToRaw(bet.amount);
+    const winnerPool = bet.side === "With" ? usdcStrToRaw(market.poolWith) : usdcStrToRaw(market.poolAgainst);
+    const loserPool  = bet.side === "With" ? usdcStrToRaw(market.poolAgainst) : usdcStrToRaw(market.poolWith);
+
+    if (winnerPool === 0n) return null; // avoid division by zero
+    if (loserPool === 0n) return { stake, grossWinShare: 0n, fee: 0n, payout: stake };
+
+    const grossWinShare = (stake * loserPool) / winnerPool;
+    const fee           = (grossWinShare * 200n) / 10000n;
+    const payout        = stake + grossWinShare - fee;
+
+    return { stake, grossWinShare, fee, payout };
+  }
+
+  // Format raw 6-decimal USDC BigInt to display string e.g. "12.34"
+  function fmt(raw) {
+    return (Number(raw) / 1_000_000).toFixed(2);
+  }
+
   async function claim(index) {
     setClaiming(index);
     try {
@@ -72,6 +109,10 @@ export default function MyBets() {
           const market = markets[bet.marketId];
           const canClaim = market?.status === "Resolved" && !bet.claimed &&
             ((market.agentCorrect && bet.side === "With") || (!market.agentCorrect && bet.side === "Against"));
+          const isResolved = market?.status === "Resolved";
+          const won = isResolved && ((market.agentCorrect && bet.side === "With") || (!market.agentCorrect && bet.side === "Against"));
+          const payout = won && market?.poolWith != null ? calcPayout(bet, market) : null;
+
           return (
             <div key={i} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
               <div style={{ flex: 1 }}>
@@ -87,15 +128,50 @@ export default function MyBets() {
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--silver)" }}>
                     {parseFloat(bet.amount).toFixed(2)} USDC
                   </span>
-                {bet.claimed && <span className="tag tag-resolved">Claimed ✅</span>}
-{market?.status === "Resolved" && !bet.claimed && (() => {
-  const won = (market.agentCorrect && bet.side === "With") || (!market.agentCorrect && bet.side === "Against");
-  return won
-    ? <span style={{ fontSize: 11, fontWeight: 700, color: "var(--green3)", border: "1px solid #1a4d2a", borderRadius: 6, padding: "3px 8px" }}>Won 🏆</span>
-    : <span style={{ fontSize: 11, fontWeight: 700, color: "#e05c5c", border: "1px solid #4d1a1a", borderRadius: 6, padding: "3px 8px" }}>Lost ❌</span>;
-})()}
-{market && <span className={`tag ${market.status === "Open" ? "tag-open" : "tag-resolved"}`}>{market.status}</span>}
+                  {bet.claimed && <span className="tag tag-resolved">Claimed ✅</span>}
+                  {isResolved && !bet.claimed && (
+                    won
+                      ? <span style={{ fontSize: 11, fontWeight: 700, color: "var(--green3)", border: "1px solid #1a4d2a", borderRadius: 6, padding: "3px 8px" }}>Won 🏆</span>
+                      : <span style={{ fontSize: 11, fontWeight: 700, color: "#e05c5c", border: "1px solid #4d1a1a", borderRadius: 6, padding: "3px 8px" }}>Lost ❌</span>
+                  )}
+                  {market && <span className={`tag ${market.status === "Open" ? "tag-open" : "tag-resolved"}`}>{market.status}</span>}
                 </div>
+
+                {/* Payout breakdown — mirrors _calculatePayout in OrauloFactory.sol */}
+                {won && payout && (
+                  <div style={{
+                    marginTop: 10,
+                    padding: "8px 12px",
+                    background: "rgba(0,200,80,0.06)",
+                    border: "1px solid #1a4d2a",
+                    borderRadius: 8,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "6px 18px",
+                    alignItems: "center",
+                  }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Staked</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--silver)", fontWeight: 700 }}>
+                        {fmt(payout.stake)} USDC
+                      </span>
+                    </div>
+                    <span style={{ color: "var(--text3)", fontSize: 14, alignSelf: "flex-end", paddingBottom: 2 }}>+</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Winnings <span style={{ color: "#555" }}>(after 2% fee)</span></span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--green3)", fontWeight: 700 }}>
+                        +{fmt(payout.grossWinShare - payout.fee)} USDC
+                      </span>
+                    </div>
+                    <span style={{ color: "var(--text3)", fontSize: 14, alignSelf: "flex-end", paddingBottom: 2 }}>=</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Payout</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--green3)", fontWeight: 900 }}>
+                        {fmt(payout.payout)} USDC
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
               {canClaim && (
                 <button className="btn btn-silver" onClick={() => claim(i)} disabled={claiming === i} style={{ minWidth: 90 }}>
