@@ -74,12 +74,16 @@ app.post("/ask", async (req, res) => {
 
     if (agentResult.canCreateMarket) {
       const allMarkets = await getAllMarkets();
-     existingMarket = allMarkets.find(m =>
-  m.status === "Open" && similarity(m.question, agentResult.marketQuestion) >= 0.7
-) || null;
+
+      // Check open AND resolved markets for duplicates
+      existingMarket = allMarkets.find(m =>
+        (m.status === "Open" || m.status === "Resolved") &&
+        similarity(m.question, agentResult.marketQuestion) >= 0.7
+      ) || null;
 
       if (existingMarket) {
         carryOverConfidence = existingMarket.confidencePct;
+        agentResult.canCreateMarket = false; // block market creation
       }
     }
 
@@ -93,11 +97,13 @@ app.post("/ask", async (req, res) => {
       marketQuestion:  agentResult.marketQuestion,
       detectedCountry: agentResult.detectedCountry || null,
       existingMarket:  existingMarket ? {
-        id:           existingMarket.id,
-        question:     existingMarket.question,
+        id:            existingMarket.id,
+        question:      existingMarket.question,
         confidencePct: existingMarket.confidencePct,
-        explorerUrl:  `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
-        analysis:     marketAnalysis[existingMarket.id] || null,
+        status:        existingMarket.status,
+        createdAt:     existingMarket.createdAt,
+        explorerUrl:   `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
+        analysis:      marketAnalysis[existingMarket.id] || null,
       } : null,
     });
   } catch (err) {
