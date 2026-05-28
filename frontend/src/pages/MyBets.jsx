@@ -13,7 +13,6 @@ export default function MyBets() {
 
   useEffect(() => {
     if (!address) return;
-
     let cancelled = false;
 
     async function loadBets() {
@@ -24,7 +23,35 @@ export default function MyBets() {
           fetch(`${API_URL}/markets`).then(r => r.json()),
         ]);
         if (cancelled) return;
-        setBets(betsData.bets || []);
+
+        // Group bets by marketId + side, summing amounts.
+        // The backend returns one entry per on-chain bet transaction; a user
+        // betting on the same market multiple times produces duplicate rows.
+        // We merge them here so each (market, side) pair shows as one card.
+        const rawBets = betsData.bets || [];
+        const grouped = {};
+        rawBets.forEach((bet, originalIndex) => {
+          const key = `${bet.marketId}:${bet.side}`;
+          if (!grouped[key]) {
+            // Clone the bet so we can mutate amount safely.
+            // Keep the first originalIndex for the claim call.
+            grouped[key] = { ...bet, amount: parseFloat(bet.amount), originalIndex };
+          } else {
+            grouped[key].amount += parseFloat(bet.amount);
+            // If any sub-bet is unclaimed, the merged bet should show as unclaimed
+            if (!bet.claimed) grouped[key].claimed = false;
+          }
+        });
+
+        // Convert amount back to string with 6 decimal places to stay consistent
+        // with how the backend formats USDC (ethers.formatUnits precision).
+        const mergedBets = Object.values(grouped).map(b => ({
+          ...b,
+          amount: b.amount.toFixed(6),
+        }));
+
+        setBets(mergedBets);
+
         const map = {};
         (marketsData.markets || []).forEach(m => { map[m.id] = m; });
         setMarkets(map);
@@ -46,7 +73,6 @@ export default function MyBets() {
   // via ethers.formatUnits(value, 6). We convert them back to raw 6-decimal
   // integer BigInts before doing fixed-point math so the result matches the contract.
   function usdcStrToRaw(str) {
-    // Parse a USDC string like "12.34" or "12.340000" into raw BigInt (6 decimals)
     const n = parseFloat(str);
     if (isNaN(n)) return 0n;
     return BigInt(Math.round(n * 1_000_000));
@@ -59,7 +85,7 @@ export default function MyBets() {
     const winnerPool = bet.side === "With" ? usdcStrToRaw(market.poolWith) : usdcStrToRaw(market.poolAgainst);
     const loserPool  = bet.side === "With" ? usdcStrToRaw(market.poolAgainst) : usdcStrToRaw(market.poolWith);
 
-    if (winnerPool === 0n) return null; // avoid division by zero
+    if (winnerPool === 0n) return null;
     if (loserPool === 0n) return { stake, grossWinShare: 0n, fee: 0n, payout: stake };
 
     const grossWinShare = (stake * loserPool) / winnerPool;
@@ -74,11 +100,23 @@ export default function MyBets() {
     return (Number(raw) / 1_000_000).toFixed(2);
   }
 
-  async function claim(index) {
-    setClaiming(index);
+  async function claim(bet) {
+    const key = `${bet.marketId}:${bet.side}`;
+    setClaiming(key);
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: ORACULO_ABI, functionName: "claimWinnings", args: [BigInt(index)] });
-      setBets(prev => prev.map((b, i) => i === index ? { ...b, claimed: true } : b));
+      await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: ORACULO_ABI,
+        functionName: "claimWinnings",
+        args: [BigInt(bet.originalIndex)],
+      });
+      setBets(prev =>
+        prev.map(b =>
+          b.marketId === bet.marketId && b.side === bet.side
+            ? { ...b, claimed: true }
+            : b
+        )
+      );
     } catch (e) { alert(e.shortMessage || e.message); }
     setClaiming(null);
   }
@@ -105,8 +143,9 @@ export default function MyBets() {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {bets.map((bet, i) => {
+        {bets.map((bet) => {
           const market = markets[bet.marketId];
+          const claimKey = `${bet.marketId}:${bet.side}`;
           const canClaim = market?.status === "Resolved" && !bet.claimed &&
             ((market.agentCorrect && bet.side === "With") || (!market.agentCorrect && bet.side === "Against"));
           const isResolved = market?.status === "Resolved";
@@ -114,7 +153,7 @@ export default function MyBets() {
           const payout = won && market?.poolWith != null ? calcPayout(bet, market) : null;
 
           return (
-            <div key={i} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+            <div key={claimKey} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
               <div style={{ flex: 1 }}>
                 <Link to={`/market/${bet.marketId}`} style={{ textDecoration: "none" }}>
                   <p style={{ fontSize: 13, color: "var(--text2)", marginBottom: 8, lineHeight: 1.4 }}>
@@ -174,15 +213,15 @@ export default function MyBets() {
                 )}
               </div>
               {canClaim && (
-                <button className="btn btn-silver" onClick={() => claim(i)} disabled={claiming === i} style={{ minWidth: 90 }}>
-                  {claiming === i ? <span className="spinner" /> : "Claim 🏆"}
+                <button className="btn btn-silver" onClick={() => claim(bet)} disabled={claiming === claimKey} style={{ minWidth: 90 }}>
+                  {claiming === claimKey ? <span className="spinner" /> : "Claim 🏆"}
                 </button>
               )}
             </div>
           );
         })}
       </div>
-         <div style={{ marginTop: 40, padding: 16, background: "var(--bg3)", border: "1px solid #2a2200", borderRadius: 10, display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <div style={{ marginTop: 40, padding: 16, background: "var(--bg3)", border: "1px solid #2a2200", borderRadius: 10, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <span style={{ fontSize: 16 }}>⚠️</span>
         <p style={{ fontSize: 12, color: "#a08030", lineHeight: 1.7, margin: 0 }}>
           <strong style={{ color: "#d4a017" }}>Testnet Mode:</strong> You're in Testnet Mode — all matches will be simulated by AI, based on the AI confidence level. No real funds are at risk.
