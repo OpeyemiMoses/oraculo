@@ -135,25 +135,51 @@ setStats({
       </div>
     );
 
-    if (result.existingMarket && !result.marketCreated) {
-      return (
-        <div style={{ padding: 14, background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 10 }}>
-          <p style={{ fontSize: 13, color: "var(--silver)", fontWeight: 600 }}>⚡ A market already exists for this</p>
-          <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>{result.existingMarket.question}</p>
-          {result.existingMarket.analysis && (
-            <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, padding: "10px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8 }}>
-              {result.existingMarket.analysis}
-            </p>
-          )}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-silver" style={{ fontSize: 12, padding: "7px 14px" }}
-              onClick={() => navigate(`/market/${result.existingMarket.id}`)}>Go to Market →</button>
-            <a href={result.existingMarket.explorerUrl} target="_blank" rel="noreferrer"
-              className="btn btn-outline" style={{ fontSize: 12, padding: "7px 14px" }}>View on X Layer ↗</a>
-          </div>
+if (result.existingMarket && !result.marketCreated) {
+  const isResolved = result.existingMarket.status === "Resolved";
+  const createdAt = result.existingMarket.createdAt;
+  const daysAgo = createdAt ? Math.floor((Date.now() / 1000 - createdAt) / 86400) : null;
+  const timeAgo = daysAgo === 0 ? "today" : daysAgo === 1 ? "1 day ago" : `${daysAgo} days ago`;
+
+  if (isResolved) {
+    return (
+      <div style={{ padding: 14, background: "#1a0a0a", border: "1px solid #4d1a1a", borderRadius: 8, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 20 }}>⌛</span>
+          <p style={{ fontSize: 13, color: "var(--red3)", fontWeight: 700 }}>You missed this one</p>
         </div>
-      );
-    }
+        <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>
+          This market was created <strong style={{ color: "var(--silver)" }}>{timeAgo}</strong> and has already been resolved. You missed your opportunity to bet on it.
+        </p>
+        <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5, fontStyle: "italic" }}>
+          "{result.existingMarket.question}"
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-outline" style={{ fontSize: 12, padding: "7px 14px" }}
+            onClick={() => navigate(`/market/${result.existingMarket.id}`)}>View Result →</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 14, background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 10 }}>
+      <p style={{ fontSize: 13, color: "var(--silver)", fontWeight: 600 }}>⚡ A market already exists for this</p>
+      <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>{result.existingMarket.question}</p>
+      {result.existingMarket.analysis && (
+        <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, padding: "10px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8 }}>
+          {result.existingMarket.analysis}
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn btn-silver" style={{ fontSize: 12, padding: "7px 14px" }}
+          onClick={() => navigate(`/market/${result.existingMarket.id}`)}>Go to Market →</button>
+        <a href={result.existingMarket.explorerUrl} target="_blank" rel="noreferrer"
+          className="btn btn-outline" style={{ fontSize: 12, padding: "7px 14px" }}>View on X Layer ↗</a>
+      </div>
+    </div>
+  );
+}
 
     if (result.marketCreated && result.market) {
       const withRisk = getRiskStyles(result.confidencePct, "with");
