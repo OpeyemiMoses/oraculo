@@ -87,8 +87,14 @@ export default function MyBets() {
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--silver)" }}>
                     {parseFloat(bet.amount).toFixed(2)} USDC
                   </span>
-                  {bet.claimed && <span className="tag tag-resolved">Claimed</span>}
-                  {market && <span className={`tag ${market.status === "Open" ? "tag-open" : "tag-resolved"}`}>{market.status}</span>}
+                {bet.claimed && <span className="tag tag-resolved">Claimed ✅</span>}
+{market?.status === "Resolved" && !bet.claimed && (() => {
+  const won = (market.agentCorrect && bet.side === "With") || (!market.agentCorrect && bet.side === "Against");
+  return won
+    ? <span style={{ fontSize: 11, fontWeight: 700, color: "var(--green3)", border: "1px solid #1a4d2a", borderRadius: 6, padding: "3px 8px" }}>Won 🏆</span>
+    : <span style={{ fontSize: 11, fontWeight: 700, color: "#e05c5c", border: "1px solid #4d1a1a", borderRadius: 6, padding: "3px 8px" }}>Lost ❌</span>;
+})()}
+{market && <span className={`tag ${market.status === "Open" ? "tag-open" : "tag-resolved"}`}>{market.status}</span>}
                 </div>
               </div>
               {canClaim && (

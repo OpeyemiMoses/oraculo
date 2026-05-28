@@ -1,8 +1,5 @@
 import "dotenv/config";
-import Groq from "groq-sdk";
-import { getAllMarkets, resolveMarket } from "./Chain.js";
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+import { getAllMarkets, resolveMarket } from "./chain.js";
 
 function decideOutcome(question, confidencePct) {
   const confidence = Number(confidencePct) || 50;
