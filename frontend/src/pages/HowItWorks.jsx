@@ -2,7 +2,7 @@ export default function HowItWorks() {
   const steps = [
     { icon: "⚽", title: "Ask the Oracle", desc: "Type any World Cup question — match outcomes, player events, tactical scenarios. No limits." },
     { icon: "⚽", title: "AI Analysis", desc: "Oráculo's AI analyzes live match data, team form, player stats, and historical patterns to generate a prediction with a confidence score." },
-    { icon: "⚽", title: "Market Opens On-Chain", desc: "Every prediction automatically creates a live prediction market on X Layer as soon as user accepts it. The confidence score sets the odds — no human intervention." },
+    { icon: "⚽", title: "Market Opens On-Chain", desc: "Every prediction automatically creates a live prediction market on X Layer as soon a user accepts it. The confidence score sets the odds — no human intervention." },
     { icon: "⚽", title: "Pick Your Side", desc: "Bet WITH the oracle if you agree. Bet AGAINST if you think it's wrong. The total losing pool + user bet amount determines the payout multiplier on each side." },
     { icon: "⚽", title: "Match Happens", desc: "The real World Cup plays out. Goals are scored, cards are given, history is made." },
     { icon: "⚽", title: "Winners Paid Automatically", desc: "Once the market resolves, the contract splits the losing pool to winners — pro-rata, on-chain, no trust required." },

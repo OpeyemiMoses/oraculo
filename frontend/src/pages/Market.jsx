@@ -27,7 +27,12 @@ export default function Market() {
   const [amount, setAmount] = useState("");
   const [side, setSide] = useState(null);
   const [txStatus, setTxStatus] = useState("");
+  const [toast, setToast] = useState(null);
   const { writeContractAsync } = useWriteContract();
+
+  function showToast(message, type = "info") {
+    setToast({ message, type });
+  }
 
   const { data: balance } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -51,11 +56,11 @@ export default function Market() {
     const betAmount = parseFloat(amount);
 
     if (betAmount < 3) {
-      toast.show("Minimum bet is 3 USDC.", "error");
+      showToast("Minimum bet is 3 USDC.", "error");
       return;
     }
     if (betAmount > userBalanceNum) {
-      toast.show(
+      showToast(
         `Insufficient balance — you have ${userBalanceNum.toFixed(2)} USDC but tried to bet ${betAmount.toFixed(2)} USDC.`,
         "error"
       );
@@ -71,11 +76,11 @@ export default function Market() {
         args: [BigInt(id), side === "with" ? 0 : 1, amountWei],
       });
       setTxStatus("✅ Bet placed!");
-      toast.show(`Bet placed — ${betAmount.toFixed(2)} USDC ${side === "with" ? "With" : "Against"} the Oracle!`, "success");
+      showToast(`Bet placed — ${betAmount.toFixed(2)} USDC ${side === "with" ? "With" : "Against"} the Oracle!`, "success");
       setTimeout(() => setTxStatus(""), 4000);
     } catch (e) {
       setTxStatus(`❌ ${e.shortMessage || e.message}`);
-      toast.show(e.shortMessage || e.message, "error");
+      showToast(e.shortMessage || e.message, "error");
     }
   }
 
@@ -295,6 +300,8 @@ export default function Market() {
 
       {/* Closed / resolved / disclaimer banners */}
       {!display.isActiveBettable && renderClosedBanner()}
+
+      {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
   );
 }
