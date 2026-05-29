@@ -3,8 +3,8 @@ import axios from "axios";
 import Groq from "groq-sdk";
 import { getAllMarkets, resolveMarket } from "./chain.js";
 
+// Before
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY;
 const FOOTBALL_API_BASE = "https://v3.football.api-sports.io";
 const FOOTBALL_HEADERS = {

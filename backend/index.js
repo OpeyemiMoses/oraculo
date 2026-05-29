@@ -81,25 +81,90 @@ const FALLBACK_LEAGUES = [
 ];
 
 const KNOWN_PLAYERS = [
-  "Mbappe", "Mbappé", "Messi", "Ronaldo", "Neymar", "Salah", "Haaland",
-  "Vinicius", "Vini Jr", "Benzema", "Lewandowski", "Kane", "Modric", "Modrić",
-  "Fernandes", "Rashford", "Saka", "Bellingham", "Pedri", "Yamal", "Lamine",
-  "Osimhen", "Musiala", "Wirtz", "Havertz", "Kimmich", "Gavi", "Griezmann",
-  "De Bruyne", "Lukaku", "De Jong", "Gakpo", "Depay", "Valverde",
-  "Darwin Nunez", "Pulisic", "Son", "Mitoma", "Kubo", "Hakimi", "Ziyech",
-  "En-Nesyri", "Vlahovic", "Eriksen", "Hojlund", "Kudus", "Mahrez",
-  "Isak", "Dybala", "Lautaro", "Mac Allister", "De Paul", "Joao Felix",
-  "Diogo Jota", "Bernardo Silva", "Cancelo", "Leao", "Endrick", "Richarlison",
-  "Raphinha", "Rodrygo", "Casemiro", "Camavinga", "Tchouameni", "Thuram",
+  // France
+  "Mbappe", "Mbappé", "Griezmann", "Thuram", "Camavinga", "Tchouameni", "Maignan", "Saliba", "Dembele", "Kante", "Kanté",
+  // Argentina
+  "Messi", "Di Maria", "Dybala", "Lautaro", "Mac Allister", "De Paul", "Molina", "Acuña",
+  // Portugal
+  "Ronaldo", "Bernardo Silva", "Joao Felix", "Diogo Jota", "Cancelo", "Leao", "Bruno Fernandes", "Vitinha", "Ruben Dias",
+  // England
+  "Kane", "Bellingham", "Saka", "Rashford", "Foden", "Rice", "Grealish", "Trippier", "Pickford",
+  // Germany
+  "Musiala", "Wirtz", "Havertz", "Kimmich", "Kroos", "Gundogan", "Gündogan", "Rudiger", "Rüdiger", "Neuer",
+  // Spain
+  "Pedri", "Gavi", "Yamal", "Lamine", "Morata", "Olmo", "Rodri", "Laporte",
+  // Brazil
+  "Neymar", "Vinicius", "Vini Jr", "Rodrygo", "Raphinha", "Richarlison", "Casemiro", "Endrick", "Alisson", "Marquinhos",
+  // Netherlands
+  "Van Dijk", "De Jong", "Gakpo", "Depay", "Dumfries", "Frimpong",
+  // Belgium
+  "De Bruyne", "Lukaku", "Tielemans", "Doku",
+  // Croatia
+  "Modric", "Modrić", "Gvardiol", "Brozovic", "Kramaric",
+  // Morocco
+  "Hakimi", "Ziyech", "Amrabat", "En-Nesyri", "Ounahi", "Mazraoui",
+  // Senegal
+  "Mane", "Mané", "Koulibaly", "Ismaila Sarr", "Gueye",
+  // Egypt
+  "Salah", "Mo Salah", "Marmoush",
+  // Algeria
+  "Mahrez", "Bennacer", "Aouar",
+  // Ivory Coast
+  "Zaha", "Kessie", "Haller",
+  // Ghana
+  "Kudus", "Partey", "Ayew",
+  // Japan
+  "Mitoma", "Kubo", "Endo", "Kamada", "Tomiyasu",
+  // South Korea
+  "Son", "Son Heung-min", "Kim Min-Jae", "Lee Kang-In",
+  // Norway
+  "Haaland", "Odegaard", "Ødegaard", "Isak", "Sorloth",
+  // Colombia
+  "James", "Luis Diaz", "Falcao", "Cuadrado",
+  // Uruguay
+  "Valverde", "Darwin Nunez", "Cavani", "Suarez", "Bentancur",
+  // Ecuador
+  "Enner Valencia", "Plata",
+  // Paraguay
+  "Almiron", "Almirón", "Sanabria",
+  // Turkey
+  "Calhanoglu", "Çalhanoğlu", "Guler", "Güler", "Yildiz",
+  // Austria
+  "Alaba", "Sabitzer", "Arnautovic",
+  // Switzerland
+  "Xhaka", "Shaqiri", "Akanji", "Embolo",
+  // Sweden
+  "Forsberg",
+  // Bosnia
+  "Dzeko", "Džeko", "Pjanic", "Pjanić",
+  // Scotland
+  "Robertson", "McTominay", "Adams",
+  // Iran
+  "Taremi", "Azmoun", "Jahanbakhsh",
+  // Curaçao
+  "Kluivert",
 ];
 
+// ── 2026 FIFA World Cup Qualified Teams ─────────────────────────────────────
 const KNOWN_TEAMS = [
-  "Brazil", "Argentina", "France", "England", "Germany", "Spain", "Portugal",
-  "Netherlands", "Belgium", "Croatia", "Morocco", "Nigeria", "Senegal",
-  "USA", "Mexico", "Japan", "South Korea", "Australia", "Uruguay", "Colombia",
-  "Ecuador", "Chile", "Peru", "Switzerland", "Denmark", "Sweden", "Poland",
-  "Serbia", "Ghana", "Egypt", "Cameroon", "Ivory Coast", "Algeria", "Tunisia",
-  "Saudi Arabia", "Iran", "Canada", "Qatar", "Wales",
+  // Hosts
+  "United States", "USA", "Canada", "Mexico",
+  // CAF
+  "Algeria", "Cape Verde", "Ivory Coast", "Egypt", "Ghana",
+  "Morocco", "Senegal", "South Africa", "Tunisia", "DR Congo",
+  // AFC
+  "Australia", "Iran", "Japan", "Jordan", "South Korea",
+  "Qatar", "Saudi Arabia", "Uzbekistan", "Iraq",
+  // UEFA
+  "Austria", "Belgium", "Bosnia and Herzegovina", "Croatia",
+  "Czech Republic", "England", "France", "Germany", "Netherlands",
+  "Norway", "Portugal", "Scotland", "Spain", "Sweden", "Switzerland", "Turkey",
+  // CONCACAF
+  "Curaçao", "Curacao", "Haiti", "Panama",
+  // CONMEBOL
+  "Argentina", "Brazil", "Colombia", "Ecuador", "Paraguay", "Uruguay",
+  // OFC
+  "New Zealand",
 ];
 
 function extractEntities(question) {
@@ -283,8 +348,11 @@ async function decideOutcome(question, confidencePct) {
 
   if (statsContext) {
     try {
-      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-      const response = await groq.chat.completions.create({
+      const groqDecider = new Groq({
+        apiKey: process.env.GROQ_API_KEY,
+        defaultHeaders: { "User-Agent": "Mozilla/5.0 (compatible; Oraculo/1.0)" },
+      });
+      const response = await groqDecider.chat.completions.create({
         model: "llama-3.3-70b-versatile",
         max_tokens: 200,
         messages: [
@@ -455,6 +523,21 @@ app.post("/ask", async (req, res) => {
 
   try {
     const agentResult = await askAgent(question);
+
+    // ── PARTICIPATION_CHECK: factual roster question — never create a market ──
+    if (agentResult.type === "PARTICIPATION_CHECK") {
+      return res.json({
+        success:         true,
+        question,
+        type:            "PARTICIPATION_CHECK",
+        analysis:        agentResult.analysis,
+        confidencePct:   0,
+        canCreateMarket: false,
+        marketQuestion:  null,
+        detectedCountry: agentResult.detectedCountry || null,
+        existingMarket:  null,
+      });
+    }
 
     let existingMarket = null;
     let carryOverConfidence = null;
