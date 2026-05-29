@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { useAccount, useWriteContract, useReadContract } from "wagmi";
 import { ethers } from "ethers";
 import { CONTRACT_ADDRESS, ORACULO_ABI, API_URL } from "../config.js";
@@ -22,6 +22,7 @@ function getRiskStyles(confidencePct, side) {
 
 export default function Market() {
   const { id } = useParams();
+  const location = useLocation();
   const { address, isConnected } = useAccount();
   const [market, setMarket] = useState(null);
   const [amount, setAmount] = useState("");
@@ -43,7 +44,34 @@ export default function Market() {
   });
 
   useEffect(() => {
-    fetch(`${API_URL}/markets/${id}`).then(r => r.json()).then(d => setMarket(d.market)).catch(() => {});
+    // Use data passed from Home page instantly if available
+    if (location.state?.market?.question) {
+      setMarket(location.state.market);
+      return;
+    }
+    // Otherwise fetch from API with retries
+    let attempts = 0;
+    let timer = null;
+    function fetchMarket() {
+      fetch(`${API_URL}/markets/${id}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.market?.question) {
+            setMarket(d.market);
+          } else if (attempts < 10) {
+            attempts++;
+            timer = setTimeout(fetchMarket, 3000);
+          }
+        })
+        .catch(() => {
+          if (attempts < 10) {
+            attempts++;
+            timer = setTimeout(fetchMarket, 3000);
+          }
+        });
+    }
+    fetchMarket();
+    return () => { if (timer) clearTimeout(timer); };
   }, [id]);
 
   async function placeBet() {

@@ -112,7 +112,8 @@ setStats({
       });
       const data = await res.json();
       if (data.success && data.market) {
-        setResult(prev => ({ ...prev, market: data.market, explorerUrl: data.explorerUrl, marketCreated: true }));
+       console.log("CREATE MARKET RESPONSE:", JSON.stringify(data));
+setResult(prev => ({ ...prev, market: data.market, explorerUrl: data.explorerUrl, marketCreated: true }));
         setMarkets(prev => [{ ...data.market, detectedCountry: result.detectedCountry }, ...prev.slice(0, 5)]);
         setStats(prev => ({ ...prev, total: prev.total + 1, open: prev.open + 1 }));
       }
@@ -192,7 +193,7 @@ if (result.existingMarket && !result.marketCreated) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ color: "var(--green3)", fontSize: 13, fontWeight: 600 }}>✅ Market created on-chain</span>
             <button className="btn btn-outline" style={{ fontSize: 12, padding: "5px 12px" }}
-              onClick={() => navigate(`/market/${result.market.id}`)}>Place Bet →</button>
+              onClick={() => navigate(`/market/${result.market.id}`, { state: { market: result.market } })}>Place Bet →</button>
             {result.explorerUrl && (
               <a href={result.explorerUrl} target="_blank" rel="noreferrer"
                 className="btn btn-outline" style={{ fontSize: 12, padding: "5px 12px" }}>View on X Layer ↗</a>
@@ -200,13 +201,13 @@ if (result.existingMarket && !result.marketCreated) {
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ flex: 1, background: withRisk.background, border: `1px solid ${withRisk.border}`, borderRadius: 10, padding: "12px 14px", cursor: "pointer" }}
-              onClick={() => navigate(`/market/${result.market.id}`)}>
+              onClick={() => navigate(`/market/${result.market.id}`, { state: { market: result.market } })}>
               <div style={{ fontSize: 10, fontWeight: 700, color: withRisk.labelColor, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>With Oracle</div>
               <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: withRisk.mainColor, letterSpacing: "0.04em" }}>With</div>
               <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{withRisk.label}</div>
             </div>
             <div style={{ flex: 1, background: againstRisk.background, border: `1px solid ${againstRisk.border}`, borderRadius: 10, padding: "12px 14px", cursor: "pointer" }}
-              onClick={() => navigate(`/market/${result.market.id}`)}>
+              onClick={() => navigate(`/market/${result.market.id}`, { state: { market: result.market } })}>
               <div style={{ fontSize: 10, fontWeight: 700, color: againstRisk.labelColor, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>Against Oracle</div>
               <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: againstRisk.mainColor, letterSpacing: "0.04em" }}>Against</div>
               <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{againstRisk.label}</div>
