@@ -39,7 +39,8 @@ let marketAnalysis = loadStorage();
 const STOPWORDS = new Set([
   "will", "the", "2026", "world", "cup", "during", "have", "this",
   "that", "with", "from", "for", "and", "but", "not", "are", "was",
-  "his", "her", "their", "team", "game", "match", "player"
+  "his", "her", "their", "team", "game", "match", "player",
+  "messi", "ronaldo", "neymar", "mbappe", "score", "play", "win"
 ]);
 
 function normalize(str) {
@@ -75,15 +76,14 @@ app.post("/ask", async (req, res) => {
     if (agentResult.canCreateMarket) {
       const allMarkets = await getAllMarkets();
 
-      // Check open AND resolved markets for duplicates
       existingMarket = allMarkets.find(m =>
         (m.status === "Open" || m.status === "Resolved") &&
-        similarity(m.question, agentResult.marketQuestion) >= 0.7
+        similarity(m.question, agentResult.marketQuestion) >= 0.85
       ) || null;
 
       if (existingMarket) {
         carryOverConfidence = existingMarket.confidencePct;
-        agentResult.canCreateMarket = false; // block market creation
+        agentResult.canCreateMarket = false;
       }
     }
 
@@ -135,9 +135,34 @@ app.post("/create-market", async (req, res) => {
       }
     }
 
+    // Build enriched market with analysis and detectedCountry included
+    const enrichedMarket = market ? {
+      ...market,
+      explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
+      analysis:        analysis || null,
+      detectedCountry: detectedCountry || null,
+      // Fallback: use question from request if chain hasn't indexed it yet
+      question:        market.question || question,
+      confidencePct:   market.confidencePct || confidencePct,
+    } : {
+      // Full fallback if chain read failed — build from request data
+      id:              marketResult.marketId,
+      question,
+      confidencePct,
+      status:          "Open",
+      agentCorrect:    false,
+      createdAt:       Math.floor(Date.now() / 1000),
+      resolveBy:       resolveBy || null,
+      poolWith:        "0.0",
+      poolAgainst:     "0.0",
+      explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
+      analysis:        analysis || null,
+      detectedCountry: detectedCountry || null,
+    };
+
     return res.json({
       success:     marketResult.success,
-      market:      market ? { ...market, explorerUrl: `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}` } : null,
+      market:      enrichedMarket,
       txHash:      marketResult.txHash || null,
       marketId:    marketResult.marketId || null,
       explorerUrl: marketResult.txHash ? `${XLAYER_EXPLORER}/tx/${marketResult.txHash}` : null,
