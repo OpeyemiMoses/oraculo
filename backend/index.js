@@ -36,6 +36,103 @@ function saveStorage(data) {
 
 let marketAnalysis = loadStorage();
 
+
+const HIDDEN_MARKETS_KEY = "__hiddenMarkets";
+
+function getHiddenMarkets() {
+  return marketAnalysis[HIDDEN_MARKETS_KEY] || {};
+}
+
+function saveHiddenMarket(market, reason, txHash = null, error = null) {
+  const hidden = getHiddenMarkets();
+  hidden[String(market.id)] = {
+    hiddenAt: new Date().toISOString(),
+    reason,
+    txHash,
+    error,
+    question: market.question,
+    createdAt: market.createdAt,
+    resolveBy: market.resolveBy,
+  };
+  marketAnalysis[HIDDEN_MARKETS_KEY] = hidden;
+  delete marketAnalysis[market.id];
+  delete marketAnalysis[`${market.id}_country`];
+  delete marketAnalysis[`${market.id}_resolved`];
+  saveStorage(marketAnalysis);
+}
+
+function isHiddenMarketId(marketId) {
+  return Boolean(getHiddenMarkets()[String(marketId)]);
+}
+
+function getTotalPool(market) {
+  return parseFloat(market.poolWith || "0") + parseFloat(market.poolAgainst || "0");
+}
+
+function isExpiredNoBetMarket(market, now = Math.floor(Date.now() / 1000)) {
+  const resolveBy = Number(market.resolveBy || 0);
+  const maturedByResolveBy = resolveBy > 0 && now >= resolveBy;
+  const maturedByAge = Number(market.createdAt || 0) > 0 && (now - Number(market.createdAt)) >= MARKET_MATURITY_S;
+  return market.status === "Open" && getTotalPool(market) === 0 && (maturedByResolveBy || maturedByAge);
+}
+
+function isClosedNoBetMarket(market) {
+  return ["Resolved", "Cancelled"].includes(market.status) && getTotalPool(market) === 0;
+}
+
+async function hideNoBetMarkets(markets, log = () => {}) {
+  const now = Math.floor(Date.now() / 1000);
+  const hidden = [];
+
+  for (const market of markets) {
+    if (isHiddenMarketId(market.id)) continue;
+
+    if (isClosedNoBetMarket(market)) {
+      saveHiddenMarket(market, "closed_with_zero_bets");
+      log(`Market #${market.id} — hidden because it is already closed with $0 in bets.`);
+      hidden.push(String(market.id));
+      continue;
+    }
+
+    if (!isExpiredNoBetMarket(market, now)) continue;
+
+    const result = await cancelMarket(market.id);
+    if (result.success) {
+      saveHiddenMarket(market, "expired_with_zero_bets", result.txHash);
+      log(`Market #${market.id} — closed and hidden because timer ended with $0 in bets. Tx: ${result.txHash}`);
+    } else {
+      saveHiddenMarket(market, "expired_with_zero_bets_cancel_failed", null, result.error);
+      log(`Market #${market.id} — hidden because timer ended with $0 in bets. Cancel failed: ${result.error}`);
+    }
+    hidden.push(String(market.id));
+  }
+
+  return hidden;
+}
+
+function isVisibleMarket(market) {
+  return !isHiddenMarketId(market.id) && !isClosedNoBetMarket(market);
+}
+
+function filterVisibleBets(bets, markets) {
+  const visibleMarkets = new Map(markets.filter(isVisibleMarket).map(m => [String(m.id), m]));
+  return bets.filter((bet) => {
+    const market = visibleMarkets.get(String(bet.marketId));
+    if (!market || parseFloat(bet.amount || "0") <= 0) return false;
+    return market.status !== "Cancelled" || !bet.claimed;
+  });
+}
+
+function enrichMarket(market) {
+  return {
+    ...market,
+    explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
+    analysis:        marketAnalysis[market.id] || null,
+    detectedCountry: marketAnalysis[`${market.id}_country`] || null,
+    resolution:      marketAnalysis[`${market.id}_resolved`] || null,
+  };
+}
+
 // ─── Duplicate Detection ──────────────────────────────────────────────────────
 
 const STOPWORDS = new Set([
@@ -420,7 +517,8 @@ async function runScheduler() {
   try {
     log("Checking open markets...");
     const markets = await getAllMarkets();
-    const open = markets.filter(m => m.status === "Open");
+    const hidden = await hideNoBetMarkets(markets, log);
+    const open = markets.filter(m => m.status === "Open" && !isHiddenMarketId(m.id) && !hidden.includes(String(m.id)));
 
     if (!open.length) {
       log("No open markets found.");
@@ -428,15 +526,16 @@ async function runScheduler() {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const ready = open.filter(m => (now - m.createdAt) >= MARKET_MATURITY_S);
+    const ready = open.filter(m => (now - m.createdAt) >= MARKET_MATURITY_S || (Number(m.resolveBy || 0) > 0 && now >= Number(m.resolveBy)));
     const waiting = open.length - ready.length;
 
-    log(`${open.length} open market(s) — ${ready.length} ready to resolve, ${waiting} still maturing.`);
+    log(`${open.length} visible open market(s) — ${ready.length} ready to resolve, ${waiting} still maturing.`);
 
     for (const market of ready) {
-      const totalPool = parseFloat(market.poolWith) + parseFloat(market.poolAgainst);
+      const totalPool = getTotalPool(market);
       if (totalPool === 0) {
-        log(`Market #${market.id} — skipping, no bets placed.`);
+        saveHiddenMarket(market, "expired_with_zero_bets");
+        log(`Market #${market.id} — closed and hidden because timer ended with $0 in bets.`);
         continue;
       }
 
@@ -544,8 +643,10 @@ app.post("/ask", async (req, res) => {
 
     if (agentResult.canCreateMarket) {
       const allMarkets = await getAllMarkets();
+      await hideNoBetMarkets(allMarkets);
 
       existingMarket = allMarkets.find(m =>
+        isVisibleMarket(m) &&
         (m.status === "Open" || m.status === "Resolved") &&
         similarity(m.question, agentResult.marketQuestion) >= 0.85
       ) || null;
@@ -637,14 +738,10 @@ app.post("/create-market", async (req, res) => {
 app.get("/markets", async (req, res) => {
   try {
     const markets = await getAllMarkets();
-    const enriched = markets.map(m => ({
-      ...m,
-      explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
-      analysis:        marketAnalysis[m.id] || null,
-      detectedCountry: marketAnalysis[`${m.id}_country`] || null,
-      resolution:      marketAnalysis[`${m.id}_resolved`] || null,
-    }));
-    res.json({ success: true, markets: enriched });
+    await hideNoBetMarkets(markets);
+    const visibleMarkets = markets.filter(isVisibleMarket);
+    const enriched = visibleMarkets.map(enrichMarket);
+    res.json({ success: true, markets: enriched, totalMarkets: enriched.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -654,16 +751,9 @@ app.get("/markets/:id", async (req, res) => {
   try {
     const market = await getMarket(req.params.id);
     if (!market) return res.status(404).json({ error: "Market not found" });
-    res.json({
-      success: true,
-      market: {
-        ...market,
-        explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
-        analysis:        marketAnalysis[req.params.id] || null,
-        detectedCountry: marketAnalysis[`${req.params.id}_country`] || null,
-        resolution:      marketAnalysis[`${req.params.id}_resolved`] || null,
-      }
-    });
+    await hideNoBetMarkets([market]);
+    if (!isVisibleMarket(market)) return res.status(404).json({ error: "Market not found" });
+    res.json({ success: true, market: enrichMarket(market) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -688,8 +778,14 @@ app.post("/admin/cancel", async (req, res) => {
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 app.get("/user/:address/bets", async (req, res) => {
-  try { res.json({ success: true, bets: await getUserBets(req.params.address) }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const [bets, markets] = await Promise.all([
+      getUserBets(req.params.address),
+      getAllMarkets(),
+    ]);
+    await hideNoBetMarkets(markets);
+    res.json({ success: true, bets: filterVisibleBets(bets, markets) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/user/:address/balance", async (req, res) => {

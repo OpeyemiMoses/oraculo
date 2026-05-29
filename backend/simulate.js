@@ -1,7 +1,7 @@
 import "dotenv/config";
 import axios from "axios";
 import Groq from "groq-sdk";
-import { getAllMarkets, resolveMarket } from "./chain.js";
+import { getAllMarkets, resolveMarket, cancelMarket } from "./chain.js";
 
 // Before
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -371,14 +371,23 @@ async function runSimulation() {
     console.log(`   Pool: ${market.poolWith} USDC (with) | ${market.poolAgainst} USDC (against)`);
 
     const totalPool = parseFloat(market.poolWith) + parseFloat(market.poolAgainst);
+    const marketAge = now - market.createdAt;
+    const hoursOld = Math.floor(marketAge / 3600);
+    const timerEnded = marketAge >= 60 * 60 * 24 || (Number(market.resolveBy || 0) > 0 && now >= Number(market.resolveBy));
+
     if (totalPool === 0) {
-      console.log("   ⏭  Skipping — no bets placed.\n");
+      if (timerEnded) {
+        console.log("   🧹 Timer ended with $0 in bets — cancelling so the backend can hide it.\n");
+        const result = await cancelMarket(market.id);
+        if (result.success) console.log(`   ✅ Cancelled! Tx: ${result.txHash}\n`);
+        else console.log(`   ❌ Cancel failed: ${result.error}\n`);
+      } else {
+        console.log("   ⏭  Skipping — no bets placed yet.\n");
+      }
       continue;
     }
 
-    const marketAge = now - market.createdAt;
-    const hoursOld = Math.floor(marketAge / 3600);
-    if (marketAge < 60 * 60 * 24) {
+    if (!timerEnded) {
       console.log(`   ⏳ Too early — market is only ${hoursOld}h old. Skipping until 24h passed.\n`);
       continue;
     }
