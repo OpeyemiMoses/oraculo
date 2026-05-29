@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "react-router-dom";
-import { useAccount, useWriteContract, useReadContract } from "wagmi";
+import { useAccount, useWriteContract, useReadContract, usePublicClient } from "wagmi";
 import { ethers } from "ethers";
 import { CONTRACT_ADDRESS, ORACULO_ABI, API_URL } from "../config.js";
 import { getMarketDisplay } from "../utils/marketStatus.js";
@@ -29,19 +29,30 @@ export default function Market() {
   const [side, setSide] = useState(null);
   const [txStatus, setTxStatus] = useState("");
   const [toast, setToast] = useState(null);
+  const [optimisticBalance, setOptimisticBalance] = useState(null);
+  const [placingBet, setPlacingBet] = useState(false);
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
 
   function showToast(message, type = "info") {
     setToast({ message, type });
   }
 
-  const { data: balance } = useReadContract({
+  const { data: balance, refetch: refetchBalance } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: ORACULO_ABI,
     functionName: "getUserBalance",
     args: [address],
     query: { enabled: !!address },
   });
+
+  useEffect(() => {
+    if (balance == null) {
+      setOptimisticBalance(null);
+      return;
+    }
+    setOptimisticBalance(parseFloat(ethers.formatUnits(balance, 6)));
+  }, [balance]);
 
   useEffect(() => {
     // Use data passed from Home page instantly if available
@@ -74,13 +85,21 @@ export default function Market() {
     return () => { if (timer) clearTimeout(timer); };
   }, [id]);
 
+  async function refreshMarket() {
+    try {
+      const res = await fetch(`${API_URL}/markets/${id}`);
+      const data = await res.json();
+      if (data.market?.question) setMarket(data.market);
+    } catch {}
+  }
+
   async function placeBet() {
-    if (!amount || !side || !isConnected) return;
+    if (!amount || !side || !isConnected || placingBet) return;
 
     // ── Balance check ────────────────────────────────────────────────────────
-    const userBalanceNum = balance
+    const userBalanceNum = optimisticBalance ?? (balance
       ? parseFloat(ethers.formatUnits(balance, 6))
-      : 0;
+      : 0);
     const betAmount = parseFloat(amount);
 
     if (betAmount < 3) {
@@ -96,19 +115,30 @@ export default function Market() {
     }
     // ────────────────────────────────────────────────────────────────────────
 
+    setPlacingBet(true);
     setTxStatus("Placing bet...");
     try {
       const amountWei = ethers.parseUnits(amount, 6);
-      await writeContractAsync({
+      const txHash = await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: ORACULO_ABI, functionName: "placeBet",
         args: [BigInt(id), side === "with" ? 0 : 1, amountWei],
       });
+
+      if (publicClient && txHash) {
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+      }
+
+      setOptimisticBalance(Math.max(0, userBalanceNum - betAmount));
+      setAmount("");
       setTxStatus("✅ Bet placed!");
       showToast(`Bet placed — ${betAmount.toFixed(2)} USDC ${side === "with" ? "With" : "Against"} the Oracle!`, "success");
+      await Promise.all([refetchBalance?.(), refreshMarket()]);
       setTimeout(() => setTxStatus(""), 4000);
     } catch (e) {
       setTxStatus(`❌ ${e.shortMessage || e.message}`);
       showToast(e.shortMessage || e.message, "error");
+    } finally {
+      setPlacingBet(false);
     }
   }
 
@@ -118,7 +148,7 @@ export default function Market() {
     </div>
   );
 
-  const userBalance = balance ? parseFloat(ethers.formatUnits(balance, 6)).toFixed(2) : "0.00";
+  const userBalance = (optimisticBalance ?? (balance ? parseFloat(ethers.formatUnits(balance, 6)) : 0)).toFixed(2);
   const display = getMarketDisplay(market);
   const totalPool = (parseFloat(market.poolWith || 0) + parseFloat(market.poolAgainst || 0)).toFixed(2);
   const withRisk = getRiskStyles(market.confidencePct, "with");
@@ -312,7 +342,7 @@ export default function Market() {
               placeholder="Amount (3 – 5000 USDC)"
               style={{ flex: 1, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", color: "var(--text)", fontSize: 14, fontFamily: "var(--font-body)", outline: "none" }}
             />
-            <button className="btn btn-silver" onClick={placeBet} disabled={!side || !amount}>Place Bet</button>
+            <button className="btn btn-silver" onClick={placeBet} disabled={!side || !amount || placingBet}>{placingBet ? <span className="spinner" /> : "Place Bet"}</button>
           </div>
           {txStatus && (
             <p style={{ fontSize: 13, color: txStatus.startsWith("✅") ? "var(--green3)" : txStatus.startsWith("❌") ? "var(--red3)" : "var(--silver2)" }}>{txStatus}</p>

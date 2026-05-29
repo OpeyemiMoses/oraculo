@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAccount } from "wagmi";
 import { API_URL } from "../config.js";
 import MarketCard from "../components/MarketCard.jsx";
 import { getMarketDisplay, getMarketPool } from "../utils/marketStatus.js";
@@ -16,6 +17,38 @@ function BallLoader() {
       <p style={{ fontSize: 12, color: "var(--text3)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
         Consulting the oracle...
       </p>
+    </div>
+  );
+}
+
+function TopToast({ message, type = "info", onDone }) {
+  useEffect(() => {
+    const timer = setTimeout(() => onDone?.(), 3000);
+    return () => clearTimeout(timer);
+  }, [onDone]);
+
+  const isError = type === "error";
+
+  return (
+    <div style={{
+      position: "fixed",
+      top: 18,
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 9999,
+      width: "min(92vw, 420px)",
+      padding: "12px 16px",
+      borderRadius: 12,
+      border: `1px solid ${isError ? "#4d1a2a" : "var(--border2)"}`,
+      background: isError ? "rgba(77, 26, 42, 0.96)" : "rgba(20, 20, 20, 0.96)",
+      color: isError ? "var(--red3)" : "var(--text)",
+      boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
+      fontSize: 13,
+      fontWeight: 700,
+      textAlign: "center",
+      animation: "toastDrop 0.25s ease",
+    }}>
+      {message}
     </div>
   );
 }
@@ -42,7 +75,13 @@ export default function Home() {
   const [markets, setMarkets] = useState([]);
   const [allMarkets, setAllMarkets] = useState([]);
   const [stats, setStats] = useState({ total: 0, open: 0, pool: "0" });
+  const [toast, setToast] = useState(null);
   const navigate = useNavigate();
+  const { isConnected } = useAccount();
+
+  function showToast(message, type = "info") {
+    setToast({ message, type });
+  }
 
 useEffect(() => {
   fetch(`${API_URL}/markets`)
@@ -98,6 +137,12 @@ setStats({
 
   async function createMarket() {
     if (!result || creating) return;
+
+    if (!isConnected) {
+      showToast("Connect your wallet to create a market", "error");
+      return;
+    }
+
     setCreating(true);
     try {
       const res = await fetch(`${API_URL}/create-market`, {
@@ -349,6 +394,7 @@ if (result.existingMarket && !result.marketCreated) {
           <strong style={{ color: "#d4a017" }}>Testnet Mode:</strong> You're in Testnet Mode — all matches will be simulated by AI, based on Live Player and Country data. No real funds are at risk.
         </p>
       </div>
+      {toast && <TopToast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
   );
 }
