@@ -2,6 +2,8 @@ import "dotenv/config";
 import fs from "fs";
 import express from "express";
 import cors from "cors";
+import axios from "axios";
+import Groq from "groq-sdk";
 import { askAgent } from "./agent.js";
 import { createMarket, resolveMarket, cancelMarket, getAllMarkets, getMarket, getUserBets, getUserBalance } from "./chain.js";
 
@@ -55,10 +57,394 @@ function similarity(a, b) {
   return intersection / Math.max(wordsA.size, wordsB.size);
 }
 
+// ─── Auto-Scheduler: Stats + Resolution Logic ─────────────────────────────────
+
+const FOOTBALL_API_BASE = "https://v3.football.api-sports.io";
+const FOOTBALL_HEADERS = { "x-apisports-key": process.env.FOOTBALL_API_KEY };
+
+const WC_LEAGUE_ID = 1;
+const WC_SEASON = 2026;
+
+const FALLBACK_SEASONS = [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015];
+const FALLBACK_LEAGUES = [
+  { id: 2,   name: "Champions League" },
+  { id: 3,   name: "Europa League" },
+  { id: 39,  name: "Premier League" },
+  { id: 140, name: "La Liga" },
+  { id: 61,  name: "Ligue 1" },
+  { id: 78,  name: "Bundesliga" },
+  { id: 135, name: "Serie A" },
+  { id: 94,  name: "Primeira Liga" },
+  { id: 88,  name: "Eredivisie" },
+  { id: 203, name: "Turkish Süper Lig" },
+  { id: 307, name: "Saudi Pro League" },
+];
+
+const KNOWN_PLAYERS = [
+  "Mbappe", "Mbappé", "Messi", "Ronaldo", "Neymar", "Salah", "Haaland",
+  "Vinicius", "Vini Jr", "Benzema", "Lewandowski", "Kane", "Modric", "Modrić",
+  "Fernandes", "Rashford", "Saka", "Bellingham", "Pedri", "Yamal", "Lamine",
+  "Osimhen", "Musiala", "Wirtz", "Havertz", "Kimmich", "Gavi", "Griezmann",
+  "De Bruyne", "Lukaku", "De Jong", "Gakpo", "Depay", "Valverde",
+  "Darwin Nunez", "Pulisic", "Son", "Mitoma", "Kubo", "Hakimi", "Ziyech",
+  "En-Nesyri", "Vlahovic", "Eriksen", "Hojlund", "Kudus", "Mahrez",
+  "Isak", "Dybala", "Lautaro", "Mac Allister", "De Paul", "Joao Felix",
+  "Diogo Jota", "Bernardo Silva", "Cancelo", "Leao", "Endrick", "Richarlison",
+  "Raphinha", "Rodrygo", "Casemiro", "Camavinga", "Tchouameni", "Thuram",
+];
+
+const KNOWN_TEAMS = [
+  "Brazil", "Argentina", "France", "England", "Germany", "Spain", "Portugal",
+  "Netherlands", "Belgium", "Croatia", "Morocco", "Nigeria", "Senegal",
+  "USA", "Mexico", "Japan", "South Korea", "Australia", "Uruguay", "Colombia",
+  "Ecuador", "Chile", "Peru", "Switzerland", "Denmark", "Sweden", "Poland",
+  "Serbia", "Ghana", "Egypt", "Cameroon", "Ivory Coast", "Algeria", "Tunisia",
+  "Saudi Arabia", "Iran", "Canada", "Qatar", "Wales",
+];
+
+function extractEntities(question) {
+  const q = question.toLowerCase();
+  return {
+    players: KNOWN_PLAYERS.filter(p => q.includes(p.toLowerCase())),
+    teams:   KNOWN_TEAMS.filter(t => q.includes(t.toLowerCase())),
+  };
+}
+
+function extractPlayerStats(player) {
+  const stats = player.statistics?.[0];
+  if (!stats) return null;
+  const goals = stats.goals?.total || 0;
+  const appearances = stats.games?.appearences || 0;
+  return {
+    name:         player.player.name,
+    age:          player.player.age,
+    nationality:  player.player.nationality,
+    rating:       stats.games?.rating || "N/A",
+    appearances,
+    goals,
+    assists:      stats.goals?.assists || 0,
+    goalsPerGame: appearances > 0 ? (goals / appearances).toFixed(2) : "0.00",
+    passAccuracy: stats.passes?.accuracy || "N/A",
+    yellowCards:  stats.cards?.yellow || 0,
+    redCards:     stats.cards?.red || 0,
+    injuryProne:  (stats.cards?.yellow || 0) > 5,
+    dataSource:   null,
+  };
+}
+
+async function getPlayerStats(playerName) {
+  // 1. Try WC 2026
+  try {
+    const res = await axios.get(`${FOOTBALL_API_BASE}/players`, {
+      headers: FOOTBALL_HEADERS,
+      params: { search: playerName, league: WC_LEAGUE_ID, season: WC_SEASON },
+    });
+    const player = res.data?.response?.[0];
+    if (player) {
+      const extracted = extractPlayerStats(player);
+      if (extracted) return { ...extracted, dataSource: `World Cup ${WC_SEASON}` };
+    }
+  } catch {}
+
+  // 2. Walk back through seasons × leagues
+  for (const season of FALLBACK_SEASONS) {
+    if (season !== WC_SEASON) {
+      try {
+        const res = await axios.get(`${FOOTBALL_API_BASE}/players`, {
+          headers: FOOTBALL_HEADERS,
+          params: { search: playerName, league: WC_LEAGUE_ID, season },
+        });
+        const player = res.data?.response?.[0];
+        if (player) {
+          const extracted = extractPlayerStats(player);
+          if (extracted) return { ...extracted, dataSource: `World Cup ${season}` };
+        }
+      } catch {}
+    }
+
+    for (const league of FALLBACK_LEAGUES) {
+      try {
+        const res = await axios.get(`${FOOTBALL_API_BASE}/players`, {
+          headers: FOOTBALL_HEADERS,
+          params: { search: playerName, league: league.id, season },
+        });
+        const player = res.data?.response?.[0];
+        if (player) {
+          const extracted = extractPlayerStats(player);
+          if (extracted) return { ...extracted, dataSource: `${league.name} ${season}` };
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+  return null;
+}
+
+async function getTeamStats(teamName) {
+  const wcSeasons = [2026, 2022, 2018, 2014];
+  for (const season of wcSeasons) {
+    try {
+      const teamRes = await axios.get(`${FOOTBALL_API_BASE}/teams`, {
+        headers: FOOTBALL_HEADERS,
+        params: { name: teamName, league: WC_LEAGUE_ID, season },
+      });
+      const team = teamRes.data?.response?.[0];
+      if (!team) continue;
+      const statsRes = await axios.get(`${FOOTBALL_API_BASE}/teams/statistics`, {
+        headers: FOOTBALL_HEADERS,
+        params: { team: team.team.id, league: WC_LEAGUE_ID, season },
+      });
+      const stats = statsRes.data?.response;
+      if (!stats) continue;
+      return {
+        name:         team.team.name,
+        form:         stats.form || "N/A",
+        goalsFor:     stats.goals?.for?.total?.total || 0,
+        goalsAgainst: stats.goals?.against?.total?.total || 0,
+        wins:         stats.fixtures?.wins?.total || 0,
+        draws:        stats.fixtures?.draws?.total || 0,
+        losses:       stats.fixtures?.loses?.total || 0,
+        cleanSheets:  stats.clean_sheet?.total || 0,
+        dataSource:   `World Cup ${season}`,
+      };
+    } catch {}
+  }
+
+  const intlLeagues = [
+    { id: 4,  name: "Euro Championship" }, { id: 5,  name: "UEFA Nations League" },
+    { id: 6,  name: "Africa Cup of Nations" }, { id: 7, name: "Copa America" },
+    { id: 10, name: "FIFA Friendlies" },
+    { id: 32, name: "WC Qualifiers Europe" }, { id: 33, name: "WC Qualifiers S.America" },
+    { id: 34, name: "WC Qualifiers Africa" },
+  ];
+
+  for (const season of FALLBACK_SEASONS) {
+    for (const league of intlLeagues) {
+      try {
+        const teamRes = await axios.get(`${FOOTBALL_API_BASE}/teams`, {
+          headers: FOOTBALL_HEADERS,
+          params: { name: teamName, league: league.id, season },
+        });
+        const team = teamRes.data?.response?.[0];
+        if (!team) continue;
+        const statsRes = await axios.get(`${FOOTBALL_API_BASE}/teams/statistics`, {
+          headers: FOOTBALL_HEADERS,
+          params: { team: team.team.id, league: league.id, season },
+        });
+        const stats = statsRes.data?.response;
+        if (!stats) continue;
+        return {
+          name:         team.team.name,
+          form:         stats.form || "N/A",
+          goalsFor:     stats.goals?.for?.total?.total || 0,
+          goalsAgainst: stats.goals?.against?.total?.total || 0,
+          wins:         stats.fixtures?.wins?.total || 0,
+          draws:        stats.fixtures?.draws?.total || 0,
+          losses:       stats.fixtures?.loses?.total || 0,
+          cleanSheets:  stats.clean_sheet?.total || 0,
+          dataSource:   `${league.name} ${season}`,
+        };
+      } catch {}
+    }
+  }
+  return null;
+}
+
+async function buildStatsContext(question) {
+  const { players, teams } = extractEntities(question);
+  const lines = [];
+
+  for (const playerName of players.slice(0, 2)) {
+    const stats = await getPlayerStats(playerName);
+    if (stats) {
+      lines.push(
+        `PLAYER: ${stats.name} (${stats.nationality}, age ${stats.age}) [Source: ${stats.dataSource}]\n` +
+        `- Rating: ${stats.rating}/10 | Appearances: ${stats.appearances} | Goals: ${stats.goals} | Assists: ${stats.assists}\n` +
+        `- Goals/game: ${stats.goalsPerGame} | Pass accuracy: ${stats.passAccuracy}% | YC: ${stats.yellowCards} | RC: ${stats.redCards}`
+      );
+    }
+  }
+
+  for (const teamName of teams.slice(0, 2)) {
+    const stats = await getTeamStats(teamName);
+    if (stats) {
+      lines.push(
+        `TEAM: ${stats.name} [Source: ${stats.dataSource}]\n` +
+        `- Form: ${stats.form} | Goals F/A: ${stats.goalsFor}/${stats.goalsAgainst} | W${stats.wins} D${stats.draws} L${stats.losses} | CS: ${stats.cleanSheets}`
+      );
+    }
+  }
+
+  return lines.length > 0 ? lines.join("\n\n") : null;
+}
+
+async function decideOutcome(question, confidencePct) {
+  const statsContext = await buildStatsContext(question);
+
+  if (statsContext) {
+    try {
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      const response = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 200,
+        messages: [
+          {
+            role: "system",
+            content: `You are simulating World Cup 2026 outcomes for a prediction market testnet.
+You have historical player/team statistics from past World Cups, club seasons, or international tournaments.
+Use these stats to predict if the oracle's YES prediction would come true at the 2026 World Cup.
+Factor in player age, trajectory, and historical performance trends.
+Respond ONLY with valid JSON: { "agentCorrect": true | false, "reason": "one sentence referencing the stats and data source" }
+No markdown, no extra text.`,
+          },
+          {
+            role: "user",
+            content: `Market question: "${question}"\n\nHistorical statistics:\n${statsContext}\n\nWould the oracle's prediction likely come true at the 2026 World Cup?`,
+          },
+        ],
+      });
+
+      const raw = response.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      return {
+        agentCorrect: parsed.agentCorrect ?? (Number(confidencePct) >= 60),
+        reason:       parsed.reason || "Decided based on historical stats.",
+        dataSource:   "Historical stats + AI",
+      };
+    } catch {}
+  }
+
+  // Final fallback: confidence score
+  const confidence = Number(confidencePct) || 50;
+  const agentCorrect = confidence >= 60;
+  return {
+    agentCorrect,
+    reason: agentCorrect
+      ? `Oracle confidence was ${confidence}% — high enough, prediction holds.`
+      : `Oracle confidence was only ${confidence}% — too low, prediction failed.`,
+    dataSource: "Confidence score fallback",
+  };
+}
+
+// ─── Scheduler State ──────────────────────────────────────────────────────────
+
+const SCHEDULER_INTERVAL_MS = 60 * 60 * 1000; // every 1 hour
+const MARKET_MATURITY_S     = 60 * 60 * 24;   // 24 hours in seconds
+let schedulerRunning = false;
+let lastSchedulerRun = null;
+let lastSchedulerLog = [];
+
+async function runScheduler() {
+  if (schedulerRunning) {
+    console.log("[Scheduler] Already running — skipping this tick.");
+    return;
+  }
+
+  schedulerRunning = true;
+  lastSchedulerRun = new Date().toISOString();
+  lastSchedulerLog = [];
+
+  const log = (msg) => {
+    console.log(`[Scheduler] ${msg}`);
+    lastSchedulerLog.push(msg);
+  };
+
+  try {
+    log("Checking open markets...");
+    const markets = await getAllMarkets();
+    const open = markets.filter(m => m.status === "Open");
+
+    if (!open.length) {
+      log("No open markets found.");
+      return;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const ready = open.filter(m => (now - m.createdAt) >= MARKET_MATURITY_S);
+    const waiting = open.length - ready.length;
+
+    log(`${open.length} open market(s) — ${ready.length} ready to resolve, ${waiting} still maturing.`);
+
+    for (const market of ready) {
+      const totalPool = parseFloat(market.poolWith) + parseFloat(market.poolAgainst);
+      if (totalPool === 0) {
+        log(`Market #${market.id} — skipping, no bets placed.`);
+        continue;
+      }
+
+      log(`Market #${market.id}: "${market.question}" — resolving...`);
+
+      const { agentCorrect, reason, dataSource } = await decideOutcome(market.question, market.confidencePct);
+
+      log(`Market #${market.id} — Oracle ${agentCorrect ? "CORRECT ✅" : "WRONG ❌"} | ${reason} | Source: ${dataSource}`);
+
+      const result = await resolveMarket(market.id, agentCorrect);
+
+      if (result.success) {
+        log(`Market #${market.id} — Resolved on-chain. Tx: ${result.txHash}. Winners: "${agentCorrect ? "With" : "Against"}"`);
+        // Store resolution metadata
+        marketAnalysis[`${market.id}_resolved`] = {
+          resolvedAt: new Date().toISOString(),
+          agentCorrect,
+          reason,
+          dataSource,
+          txHash: result.txHash,
+        };
+        saveStorage(marketAnalysis);
+      } else {
+        log(`Market #${market.id} — Resolution failed: ${result.error}`);
+      }
+
+      // Pause between markets to respect rate limits
+      await new Promise(r => setTimeout(r, 3000));
+    }
+
+    log("Scheduler run complete.");
+  } catch (err) {
+    console.error("[Scheduler] Unexpected error:", err.message);
+    lastSchedulerLog.push(`ERROR: ${err.message}`);
+  } finally {
+    schedulerRunning = false;
+  }
+}
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", service: "Oráculo API" });
+  res.json({
+    status:          "ok",
+    service:         "Oráculo API",
+    scheduler: {
+      lastRun:       lastSchedulerRun || "never",
+      running:       schedulerRunning,
+      intervalHours: SCHEDULER_INTERVAL_MS / 1000 / 3600,
+      nextRunIn:     lastSchedulerRun
+        ? `${Math.max(0, Math.round((SCHEDULER_INTERVAL_MS - (Date.now() - new Date(lastSchedulerRun).getTime())) / 60000))} min`
+        : "on next tick",
+    },
+  });
+});
+
+// ─── Scheduler Status + Manual Trigger ───────────────────────────────────────
+
+app.get("/scheduler/status", (req, res) => {
+  res.json({
+    running:       schedulerRunning,
+    lastRun:       lastSchedulerRun || "never",
+    lastLog:       lastSchedulerLog,
+    intervalHours: SCHEDULER_INTERVAL_MS / 1000 / 3600,
+    maturityHours: MARKET_MATURITY_S / 3600,
+  });
+});
+
+app.post("/scheduler/run", async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY && adminKey !== process.env.PRIVATE_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  res.json({ success: true, message: "Scheduler triggered manually. Check /scheduler/status for progress." });
+  // Fire without awaiting so the response returns immediately
+  runScheduler();
 });
 
 // ─── Ask ──────────────────────────────────────────────────────────────────────
@@ -88,7 +474,7 @@ app.post("/ask", async (req, res) => {
     }
 
     return res.json({
-      success: true,
+      success:         true,
       question,
       type:            agentResult.type,
       analysis:        agentResult.analysis,
@@ -124,28 +510,18 @@ app.post("/create-market", async (req, res) => {
     let market = null;
     if (marketResult.success && marketResult.marketId) {
       market = await getMarket(marketResult.marketId);
-
-      if (analysis) {
-        marketAnalysis[marketResult.marketId] = analysis;
-        saveStorage(marketAnalysis);
-      }
-      if (detectedCountry) {
-        marketAnalysis[`${marketResult.marketId}_country`] = detectedCountry;
-        saveStorage(marketAnalysis);
-      }
+      if (analysis) { marketAnalysis[marketResult.marketId] = analysis; saveStorage(marketAnalysis); }
+      if (detectedCountry) { marketAnalysis[`${marketResult.marketId}_country`] = detectedCountry; saveStorage(marketAnalysis); }
     }
 
-    // Build enriched market with analysis and detectedCountry included
     const enrichedMarket = market ? {
       ...market,
       explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
       analysis:        analysis || null,
       detectedCountry: detectedCountry || null,
-      // Fallback: use question from request if chain hasn't indexed it yet
       question:        market.question || question,
       confidencePct:   market.confidencePct || confidencePct,
     } : {
-      // Full fallback if chain read failed — build from request data
       id:              marketResult.marketId,
       question,
       confidencePct,
@@ -183,6 +559,7 @@ app.get("/markets", async (req, res) => {
       explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
       analysis:        marketAnalysis[m.id] || null,
       detectedCountry: marketAnalysis[`${m.id}_country`] || null,
+      resolution:      marketAnalysis[`${m.id}_resolved`] || null,
     }));
     res.json({ success: true, markets: enriched });
   } catch (err) {
@@ -201,6 +578,7 @@ app.get("/markets/:id", async (req, res) => {
         explorerUrl:     `${XLAYER_EXPLORER}/address/${process.env.CONTRACT_ADDRESS}`,
         analysis:        marketAnalysis[req.params.id] || null,
         detectedCountry: marketAnalysis[`${req.params.id}_country`] || null,
+        resolution:      marketAnalysis[`${req.params.id}_resolved`] || null,
       }
     });
   } catch (err) {
@@ -239,4 +617,14 @@ app.get("/user/:address/balance", async (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Oráculo API running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Oráculo API running on port ${PORT}`);
+
+  // Kick off the scheduler — first run after 5 min, then every hour
+  setTimeout(() => {
+    runScheduler();
+    setInterval(runScheduler, SCHEDULER_INTERVAL_MS);
+  }, 5 * 60 * 1000);
+
+  console.log(`[Scheduler] Auto-resolution active — checking markets every ${SCHEDULER_INTERVAL_MS / 1000 / 3600}h (first run in 5 min)`);
+});
