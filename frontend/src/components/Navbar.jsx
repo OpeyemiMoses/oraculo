@@ -53,7 +53,7 @@ export default function Navbar() {
     { path: "/leaderboard", label: "Open Markets" },
     { path: "/how",         label: "How It Works" },
     { path: "/wallet",      label: "Wallet" },
-    { path: "/profile",     label: "Profile" }
+    ...(isConnected ? [{ path: "/profile", label: "Profile" }] : []),
   ];
 
   const short = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
@@ -108,7 +108,7 @@ function connectWallet(wallet) {
   return (
     <>
       <nav style={{ background: "#000", borderBottom: "1px solid #1f1f1f", position: "sticky", top: 0, zIndex: 100, padding: "0 20px" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
 
           <Link to="/" style={{ textDecoration: "none", flexShrink: 0 }}>
             <span style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 800, letterSpacing: "0.08em", color: "#c0c0c0" }}>
@@ -116,10 +116,10 @@ function connectWallet(wallet) {
             </span>
           </Link>
 
-          <div style={{ display: "flex", gap: 2, alignItems: "center" }} className="desktop-nav">
+          <div style={{ display: "flex", gap: 0, alignItems: "center" }} className="desktop-nav">
             {nav.map(item => (
               <Link key={item.path} to={item.path} style={{
-                padding: "6px 14px", borderRadius: 8, textDecoration: "none", fontSize: 13, fontWeight: 600, letterSpacing: "0.02em",
+                padding: "6px 9px", borderRadius: 8, textDecoration: "none", fontSize: 12, fontWeight: 600, letterSpacing: "0em", whiteSpace: "nowrap",
                 color: location.pathname === item.path ? "#c0c0c0" : "#444",
                 background: location.pathname === item.path ? "rgba(192,192,192,0.08)" : "transparent",
                 transition: "all 0.15s",

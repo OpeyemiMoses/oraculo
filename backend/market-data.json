@@ -200,6 +200,24 @@
       "question": "Will Marcus Rashford score against Portugal in the 2026 World Cup?",
       "createdAt": 1780035242,
       "resolveBy": 1780121640
+    },
+    "26": {
+      "hiddenAt": "2026-05-30T12:36:38.876Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Argentina reach the 2026 FIFA World Cup final?",
+      "createdAt": 1780047348,
+      "resolveBy": 1780133728
+    },
+    "27": {
+      "hiddenAt": "2026-05-30T12:36:38.879Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Kylian Mbappe score against Argentina in the 2026 World Cup?",
+      "createdAt": 1780052359,
+      "resolveBy": 1780138755
     }
   },
   "5_country": "fr",
