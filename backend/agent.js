@@ -1,5 +1,5 @@
 import Groq from "groq-sdk";
-import { buildMatchContext } from "./football.js";
+import { buildMatchContext, getTournamentPrediction } from "./football.js";
 
 function getGroqClient() {
   if (!process.env.GROQ_API_KEY) {
@@ -16,7 +16,91 @@ function extractConfidence(text) {
   return 50;
 }
 
+// Detect if question is asking who will WIN the whole tournament
+function isWinQuestion(q) {
+  const lower = q.toLowerCase();
+  const winPhrases = [
+    "who will win", "who wins", "who is going to win", "who gonna win",
+    "which team will win", "which country will win", "who will be champion",
+    "who will be the champion", "world cup winner", "wc winner",
+    "who takes the cup", "who lifts the trophy", "tournament winner",
+    "champion of the world cup", "2026 champion", "win the world cup",
+    "win the 2026", "win the wc"
+  ];
+  return winPhrases.some(p => lower.includes(p));
+}
+
+// Detect if question is asking who will LOSE / exit early
+function isLoseQuestion(q) {
+  const lower = q.toLowerCase();
+  const losePhrases = [
+    "who will lose", "who loses", "who will be eliminated", "who gets eliminated",
+    "who will exit", "who will go out", "who will crash out",
+    "which team will lose", "which country will lose", "early exit",
+    "group stage exit", "who won't make it", "who will fail",
+    "worst team", "weakest team", "bottom of the group"
+  ];
+  return losePhrases.some(p => lower.includes(p));
+}
+
 export async function askAgent(question) {
+  // ── Handle WIN question with cached prediction ──
+  if (isWinQuestion(question)) {
+    try {
+      const prediction = await getTournamentPrediction();
+      const { winner, topContenders } = prediction;
+      const contenderList = topContenders
+        .map((c, i) => `${i + 1}. ${c.name}${c.fifaRank ? ` (FIFA #${c.fifaRank})` : ""}${c.starPlayerRating ? ` — star rating: ${c.starPlayerRating}` : ""}`)
+        .join(", ");
+
+      const analysis = `Based on FIFA rankings, player OVR ratings, and squad depth analysis, **${winner.name}** has the highest potential to win the 2026 World Cup. ` +
+        `Their overall strength score of ${winner.score} leads all 48 qualified nations. ` +
+        `Top contenders in order: ${contenderList}. ` +
+        `This prediction is based on current player ratings and FIFA ranking data.`;
+
+      return {
+        type: "DIRECT_PREDICTION",
+        analysis,
+        confidencePct: 72,
+        canCreateMarket: true,
+        marketQuestion: `Will ${winner.name} win the 2026 FIFA World Cup?`,
+        detectedCountry: winner.code,
+        question,
+      };
+    } catch (err) {
+      console.error("Tournament prediction error:", err.message);
+    }
+  }
+
+  // ── Handle LOSE question with cached prediction ──
+  if (isLoseQuestion(question)) {
+    try {
+      const prediction = await getTournamentPrediction();
+      const { losingCountries } = prediction;
+      const loserList = losingCountries
+        .map((c, i) => `${i + 1}. ${c.name}${c.fifaRank ? ` (FIFA #${c.fifaRank})` : ""}`)
+        .join(", ");
+
+      const bottom = losingCountries[0];
+      const analysis = `Based on FIFA rankings, squad depth, and player ratings, the teams most likely to exit early in the 2026 World Cup are: ${loserList}. ` +
+        `**${bottom.name}** ranks as the weakest qualified team with a strength score of ${bottom.score}. ` +
+        `These nations face significant challenges against stronger opposition in the group stage.`;
+
+      return {
+        type: "DIRECT_PREDICTION",
+        analysis,
+        confidencePct: 65,
+        canCreateMarket: true,
+        marketQuestion: `Will ${bottom.name} be eliminated in the group stage of the 2026 World Cup?`,
+        detectedCountry: bottom.code,
+        question,
+      };
+    } catch (err) {
+      console.error("Tournament lose prediction error:", err.message);
+    }
+  }
+
+  // ── Standard agent flow ──
   let matchContext = "";
   try { matchContext = await buildMatchContext(); } catch { matchContext = "Live match data temporarily unavailable."; }
 
@@ -76,8 +160,6 @@ Egypt (eg): Salah/Mo Salah, El Shenawy, Marmoush, Trezeguet
 Algeria (dz): Mahrez, Bennacer, Aouar, Slimani, Bensebaini
 Ivory Coast (ci): Zaha, Kessie/Kessiè, Haller, Pepe/Pépé, Fofana
 Ghana (gh): Kudus, Partey, Jordan Ayew, Andre Ayew, Lamptey
-Cameroon (cm): Anguissa, Choupo-Moting, Onana — NOTE: Cameroon did NOT qualify for 2026. Questions about Cameroonian players at 2026 WC should note this.
-Nigeria (ng): Osimhen, Lookman, Chukwueze, Ndidi — NOTE: Nigeria did NOT qualify for 2026. Questions about Nigerian players at 2026 WC should note this.
 Tunisia (tn): Khazri, Msakni, Sassi, Talbi
 South Africa (za): Zwane, Williams, Tau, Mothwa
 Cape Verde (cv): Tavares, Andrade, Pina
@@ -85,7 +167,7 @@ DR Congo (cd): Lukebakio, Bongonda, Meschack Elia
 Jordan (jo): Al-Tamari, Yazan, Almajali
 Japan (jp): Mitoma, Kubo, Endo, Kamada, Tomiyasu, Ueda
 South Korea (kr): Son/Son Heung-min, Kim Min-Jae, Lee Kang-In, Hwang Hee-Chan
-Australia (au): Leckie, Hrustic, Ryan, Irvine, Macallister (note: different from Argentina's Mac Allister)
+Australia (au): Leckie, Hrustic, Ryan, Irvine
 Iran (ir): Taremi, Azmoun, Jahanbakhsh, Gholizadeh
 Saudi Arabia (sa): Al-Dawsari, Al-Shahrani, Al-Owais, Kanno
 Qatar (qa): Al-Moez Ali, Boudiaf, Al-Haydos
@@ -114,9 +196,6 @@ Panama (pa): Davis, Murillo, Fajardo, Roderick Miller
 3. FUTURE_PREDICTION — about a future match event (will X score, red card, injury, etc.)
 4. DIRECT_PREDICTION — broad tournament prediction (who will win the WC, top scorer, best player, champion)
 5. PARTICIPATION_CHECK — user is asking whether a player or team is playing/participating in the 2026 World Cup.
-   Use this when the question contains phrases like: "is X playing", "will X be at the World Cup", "did X qualify",
-   "is X in the World Cup", "is X going to the World Cup", "will X play in 2026".
-   These are factual roster/qualification questions — NOT predictions — so NO market should be created.
 
 === RESPONSE — return ONLY valid JSON, no markdown ===
 {
@@ -133,11 +212,7 @@ Panama (pa): Davis, Murillo, Fajardo, Roderick Miller
 - canCreateMarket: false for NOT_WORLD_CUP, PAST_EVENT, and PARTICIPATION_CHECK
 - confidencePct: 0 for NOT_WORLD_CUP, PAST_EVENT, and PARTICIPATION_CHECK
 - marketQuestion: null for PARTICIPATION_CHECK, NOT_WORLD_CUP, PAST_EVENT
-- For PARTICIPATION_CHECK: answer factually from the qualified teams list above.
-  If the player's national team did NOT qualify (e.g. Nigeria, Cameroon, Chile, Poland, Serbia, Denmark):
-    state clearly that their country did not qualify for 2026.
-  If the player's national team DID qualify: confirm they are expected to be part of the squad.
-  End PARTICIPATION_CHECK analysis with: "This is a factual participation question — no prediction market needed."
+- For PARTICIPATION_CHECK: answer factually. End with: "This is a factual participation question — no prediction market needed."
 - For NOT_WORLD_CUP: end analysis with "This question is not related to the World Cup."
 - For PAST_EVENT: answer from historical data only
 - detectedCountry: ALWAYS use the player's NATIONAL team code, never their club country`;
