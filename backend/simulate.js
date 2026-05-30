@@ -3,7 +3,6 @@ import axios from "axios";
 import Groq from "groq-sdk";
 import { getAllMarkets, resolveMarket, cancelMarket } from "./chain.js";
 
-// Before
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY;
 const FOOTBALL_API_BASE = "https://v3.football.api-sports.io";
@@ -16,7 +15,6 @@ const WC_LEAGUE_ID = 1;
 const WC_SEASON = 2026;
 
 // ─── Season fallback chain ────────────────────────────────────────────────────
-// Ordered from most recent to oldest. We'll walk this list until we find data.
 const FALLBACK_SEASONS = [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015];
 
 // Top leagues to try when no WC data exists for a player
@@ -34,10 +32,39 @@ const FALLBACK_LEAGUES = [
   { id: 307, name: "Saudi Pro League" },
 ];
 
+// ─── FIFA Rankings ────────────────────────────────────────────────────────────
+
+let cachedFIFARankings = null;
+
+async function getFIFARankings() {
+  if (cachedFIFARankings) return cachedFIFARankings;
+  try {
+    const res = await axios.get(`${FOOTBALL_API_BASE}/teams/rankings/fifa`, {
+      headers: FOOTBALL_HEADERS,
+    });
+    const rankings = res.data?.response || [];
+    cachedFIFARankings = rankings.slice(0, 30).map((r) => ({
+      rank: r.rank,
+      team: r.team?.name,
+      points: r.points,
+    }));
+    console.log(`   🌍 FIFA Rankings fetched: ${cachedFIFARankings.length} teams`);
+    return cachedFIFARankings;
+  } catch (err) {
+    console.error("   ⚠️  FIFA rankings fetch failed:", err.message);
+    return [];
+  }
+}
+
+function getRankingForTeam(rankings, teamName) {
+  if (!teamName || !rankings.length) return null;
+  const name = teamName.toLowerCase();
+  return rankings.find((r) => r.team?.toLowerCase().includes(name) || name.includes(r.team?.toLowerCase()));
+}
+
 // ─── Fetch team stats with season fallback ────────────────────────────────────
 
 async function getTeamStats(teamName) {
-  // 1. Try WC seasons first (2026, 2022, 2018, 2014)
   const wcSeasons = [2026, 2022, 2018, 2014];
   for (const season of wcSeasons) {
     try {
@@ -74,7 +101,6 @@ async function getTeamStats(teamName) {
     }
   }
 
-  // 2. Try qualifier / international campaigns across recent seasons
   const intlLeagues = [
     { id: 4,   name: "Euro Championship" },
     { id: 5,   name: "UEFA Nations League" },
@@ -128,7 +154,6 @@ async function getTeamStats(teamName) {
 // ─── Fetch player stats with deep season + league fallback ────────────────────
 
 async function getPlayerStats(playerName) {
-  // 1. Try World Cup 2026 first
   try {
     const res = await axios.get(`${FOOTBALL_API_BASE}/players`, {
       headers: FOOTBALL_HEADERS,
@@ -137,17 +162,13 @@ async function getPlayerStats(playerName) {
     const player = res.data?.response?.[0];
     if (player) {
       const extracted = extractPlayerStats(player);
-      if (extracted) {
-        return { ...extracted, dataSource: `World Cup ${WC_SEASON}` };
-      }
+      if (extracted) return { ...extracted, dataSource: `World Cup ${WC_SEASON}` };
     }
   } catch (err) {
     console.error(`Player stats error for ${playerName} (WC 2026):`, err.message);
   }
 
-  // 2. Walk back through seasons × leagues until we find something
   for (const season of FALLBACK_SEASONS) {
-    // Try WC first for each historical season (2022, 2018 etc.)
     if (season !== WC_SEASON) {
       try {
         const res = await axios.get(`${FOOTBALL_API_BASE}/players`, {
@@ -157,14 +178,11 @@ async function getPlayerStats(playerName) {
         const player = res.data?.response?.[0];
         if (player) {
           const extracted = extractPlayerStats(player);
-          if (extracted) {
-            return { ...extracted, dataSource: `World Cup ${season}` };
-          }
+          if (extracted) return { ...extracted, dataSource: `World Cup ${season}` };
         }
       } catch {}
     }
 
-    // Try club leagues for this season
     for (const league of FALLBACK_LEAGUES) {
       try {
         const res = await axios.get(`${FOOTBALL_API_BASE}/players`, {
@@ -174,13 +192,10 @@ async function getPlayerStats(playerName) {
         const player = res.data?.response?.[0];
         if (player) {
           const extracted = extractPlayerStats(player);
-          if (extracted) {
-            return { ...extracted, dataSource: `${league.name} ${season}` };
-          }
+          if (extracted) return { ...extracted, dataSource: `${league.name} ${season}` };
         }
       } catch {}
 
-      // Small delay to respect rate limits
       await new Promise(r => setTimeout(r, 150));
     }
   }
@@ -209,7 +224,7 @@ function extractPlayerStats(player) {
     yellowCards: stats.cards?.yellow || 0,
     redCards: stats.cards?.red || 0,
     injuryProne: (stats.cards?.yellow || 0) > 5,
-    dataSource: null, // filled by caller
+    dataSource: null,
   };
 }
 
@@ -246,10 +261,11 @@ function extractEntities(question) {
 
 // ─── Build stats context ──────────────────────────────────────────────────────
 
-async function buildStatsContext(question) {
+async function buildStatsContext(question, fifaRankings) {
   const { players, teams } = extractEntities(question);
   const lines = [];
 
+  // Player stats
   for (const playerName of players.slice(0, 2)) {
     console.log(`   🔍 Fetching stats for player: ${playerName}...`);
     const stats = await getPlayerStats(playerName);
@@ -267,17 +283,24 @@ PLAYER: ${stats.name} (${stats.nationality}, age ${stats.age}) [Source: ${stats.
     }
   }
 
+  // Team stats + FIFA ranking
   for (const teamName of teams.slice(0, 2)) {
     console.log(`   🔍 Fetching stats for team: ${teamName}...`);
     const stats = await getTeamStats(teamName);
-    if (stats) {
-      console.log(`   ✅ Found ${teamName} data from: ${stats.dataSource}`);
+    const ranking = getRankingForTeam(fifaRankings, teamName);
+
+    if (stats || ranking) {
+      const rankingLine = ranking
+        ? `- FIFA Ranking: #${ranking.rank} (${ranking.points} pts)`
+        : "- FIFA Ranking: Not found";
+
       lines.push(`
-TEAM: ${stats.name} [Source: ${stats.dataSource}]
-- Recent form: ${stats.form}
-- Goals scored: ${stats.goalsFor} | Goals conceded: ${stats.goalsAgainst}
-- Record: W${stats.wins} D${stats.draws} L${stats.losses}
-- Clean sheets: ${stats.cleanSheets}
+TEAM: ${stats?.name || teamName} [Source: ${stats?.dataSource || "FIFA Rankings only"}]
+${rankingLine}
+- Recent form: ${stats?.form || "N/A"}
+- Goals scored: ${stats?.goalsFor ?? "N/A"} | Goals conceded: ${stats?.goalsAgainst ?? "N/A"}
+- Record: W${stats?.wins ?? "?"} D${stats?.draws ?? "?"} L${stats?.losses ?? "?"}
+- Clean sheets: ${stats?.cleanSheets ?? "N/A"}
       `.trim());
     }
   }
@@ -287,8 +310,14 @@ TEAM: ${stats.name} [Source: ${stats.dataSource}]
 
 // ─── AI decision with real stats ─────────────────────────────────────────────
 
-async function decideOutcome(question, confidencePct) {
-  const statsContext = await buildStatsContext(question);
+async function decideOutcome(question, confidencePct, fifaRankings) {
+  const statsContext = await buildStatsContext(question, fifaRankings);
+
+  // Build FIFA ranking snippet for context
+  const rankingSnippet = fifaRankings.length > 0
+    ? `\nFIFA WORLD RANKINGS (Top 30):\n` +
+      fifaRankings.map(r => `  ${r.rank}. ${r.team} (${r.points} pts)`).join("\n")
+    : "";
 
   if (statsContext) {
     console.log("   📊 Historical stats found — using AI + data decision...");
@@ -300,16 +329,16 @@ async function decideOutcome(question, confidencePct) {
           {
             role: "system",
             content: `You are simulating World Cup 2026 outcomes for a prediction market testnet.
-You have been given historical player/team statistics which may come from past World Cups, club seasons, or international tournaments.
-Use these stats to make an informed prediction about whether the oracle's prediction would likely come true at the 2026 World Cup.
+You have been given historical player/team statistics and FIFA world rankings.
+Use these to make an informed prediction about whether the oracle's prediction would likely come true at the 2026 World Cup.
 The oracle always predicts YES / the positive outcome.
-Note: stats may be from older seasons — factor in player age, trajectory, and historical performance trends.
-Respond ONLY with valid JSON: { "agentCorrect": true | false, "reason": "one sentence referencing the stats and data source" }
+Factor in: player ratings, team form, FIFA ranking strength, age/trajectory, and historical performance.
+Respond ONLY with valid JSON: { "agentCorrect": true | false, "reason": "one sentence referencing the stats, ratings, or FIFA ranking" }
 No markdown, no extra text.`,
           },
           {
             role: "user",
-            content: `Market question: "${question}"\n\nHistorical statistics:\n${statsContext}\n\nBased on these historical stats, would the oracle's prediction likely come true at the 2026 World Cup?`,
+            content: `Market question: "${question}"\n\nPlayer/Team statistics:\n${statsContext}${rankingSnippet}\n\nBased on these stats and rankings, would the oracle's prediction likely come true at the 2026 World Cup?`,
           },
         ],
       });
@@ -328,8 +357,8 @@ No markdown, no extra text.`,
     }
   }
 
-  // Final fallback: confidence-based decision
-  console.log("   📊 No stats found across any season — using confidence score...");
+  // Fallback: confidence-based
+  console.log("   📊 No stats found — using confidence score...");
   const confidence = Number(confidencePct) || 50;
   const agentCorrect = confidence >= 60;
   return {
@@ -345,13 +374,20 @@ No markdown, no extra text.`,
 // ─── Main simulation ──────────────────────────────────────────────────────────
 
 async function runSimulation() {
-  console.log("\n🌍 ORÁCULO TESTNET SIMULATION (Deep Historical Stats Mode)\n");
+  console.log("\n🌍 ORÁCULO TESTNET SIMULATION (Deep Historical Stats + FIFA Rankings Mode)\n");
   console.log(`📅 Season fallback chain: ${FALLBACK_SEASONS.join(" → ")}`);
   console.log(`🏆 League fallback chain: ${FALLBACK_LEAGUES.map(l => l.name).join(", ")}\n`);
 
   if (!process.env.PRIVATE_KEY) {
     console.log("❌ PRIVATE_KEY not set in .env — cannot resolve markets.\n");
     process.exit(1);
+  }
+
+  // Fetch FIFA rankings once upfront — reused for all markets
+  console.log("🌍 Fetching FIFA World Rankings...");
+  const fifaRankings = await getFIFARankings();
+  if (fifaRankings.length) {
+    console.log(`   Top 5: ${fifaRankings.slice(0, 5).map(r => `${r.rank}. ${r.team}`).join(", ")}\n`);
   }
 
   const markets = await getAllMarkets();
@@ -392,11 +428,11 @@ async function runSimulation() {
       continue;
     }
 
-    const { agentCorrect, reason, usedRealStats, statsContext } = await decideOutcome(market.question, market.confidencePct);
+    const { agentCorrect, reason, usedRealStats, statsContext } = await decideOutcome(market.question, market.confidencePct, fifaRankings);
 
     console.log(`   📣 Result: Oracle was ${agentCorrect ? "✅ CORRECT" : "❌ WRONG"}`);
     console.log(`   💬 ${reason}`);
-    console.log(`   📊 Decision based on: ${usedRealStats ? "Historical player/team stats" : "Confidence score fallback"}`);
+    console.log(`   📊 Decision based on: ${usedRealStats ? "Historical stats + FIFA rankings" : "Confidence score fallback"}`);
     if (statsContext) {
       console.log(`   📁 Stats used:\n${statsContext.split("\n").map(l => `      ${l}`).join("\n")}`);
     }
@@ -411,7 +447,6 @@ async function runSimulation() {
       console.log(`   ❌ Failed: ${result.error}\n`);
     }
 
-    // Pause between markets to be kind to rate limits
     await new Promise(r => setTimeout(r, 3000));
   }
 

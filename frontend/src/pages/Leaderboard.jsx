@@ -17,18 +17,20 @@ export default function Leaderboard() {
 
   const filters = ["Live", "History"];
 
-  const liveCount = markets.filter(m => getMarketDisplay(m).isLiveListItem).length;
-  const historyCount = markets.filter(m => {
+  const visibleMarkets = markets.filter(m => {
     const d = getMarketDisplay(m);
-    return d.isEmptyExpired || d.isSoloBetExpired || d.isRunningClosed || m.status === "Cancelled" || m.status === "Resolved";
+    return !d.isSoloBetExpired && !d.isEmptyExpired;
+  });
+  const liveCount = visibleMarkets.filter(m => getMarketDisplay(m).isLiveListItem).length;
+  const historyCount = visibleMarkets.filter(m => {
+    const d = getMarketDisplay(m);
+    return d.isRunningClosed || m.status === "Cancelled" || m.status === "Resolved";
   }).length;
 
-  const filtered = markets.filter(m => {
+  const filtered = visibleMarkets.filter(m => {
     const display = getMarketDisplay(m);
     if (filter === "Live") return display.isLiveListItem;
     if (filter === "History") return (
-      display.isEmptyExpired ||
-      display.isSoloBetExpired ||
       display.isRunningClosed ||
       m.status === "Cancelled" ||
       m.status === "Resolved"
@@ -41,7 +43,7 @@ export default function Leaderboard() {
     return getMarketPool(b) - getMarketPool(a);
   });
 
-  const totalPool = markets.reduce((acc, m) => acc + getMarketPool(m), 0);
+  const totalPool = markets.filter(m => getMarketDisplay(m).isLiveListItem).reduce((acc, m) => acc + getMarketPool(m), 0);
   const resolved = markets.filter(m => m.status === "Resolved");
   const agentWins = resolved.filter(m => m.agentCorrect).length;
   const accuracy = resolved.length > 0 ? Math.round((agentWins / resolved.length) * 100) : 0;
@@ -58,8 +60,8 @@ export default function Leaderboard() {
 
       <div className="grid-3" style={{ marginBottom: 28 }}>
         {[
-          { label: "Total Markets",   value: markets.length,          img: "/images/stat-markets.png" },
-          { label: "Total Staked",    value: `${totalPool.toFixed(0)} USDC`, img: "/images/stat-staked.png" },
+          { label: "Total Markets",   value: visibleMarkets.length,          img: "/images/stat-markets.png" },
+          { label: "Live USDC Staked", value: `${totalPool.toFixed(0)} USDC`, img: "/images/stat-staked.png" },
           { label: "Oracle Accuracy", value: `${accuracy}%`,          img: "/images/stat-accuracy.png" },
         ].map(s => (
           <div key={s.label} className="card" style={{ textAlign: "center", position: "relative", overflow: "hidden" }}>

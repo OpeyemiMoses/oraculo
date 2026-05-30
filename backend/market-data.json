@@ -1,24 +1,7 @@
 {
-  "2": "Cristiano Ronaldo has shown remarkable longevity and recently confirmed his intention to play in the 2026 World Cup with Portugal. At 41, he would be the oldest player in World Cup history, but his fitness and goal record suggest he could still contribute significantly.",
-  "3": "Lionel Messi is a key player for Argentina, and it is likely that he will participate in the 2026 World Cup if he is fit and selected by the Argentine coach. However, since the 2026 World Cup has not started, the final decision on his participation is still uncertain. Considering his previous performances and dedication to the sport, there's a high chance he'll be part of the Argentine squad.",
-  "4": "Neymar, the Brazilian forward, has a history of injuries, but it's difficult to predict with certainty whether he will sustain an injury in the 2026 World Cup. Considering his previous experiences and the intense nature of the tournament, there is a possibility of injury. However, he has also shown resilience and a strong ability to recover from setbacks.",
   "5": "Kylian Mbappé is a skilled French footballer known for his goal-scoring ability. As France is participating in the 2026 World Cup, there's a possibility that Mbappé will score. However, the outcome of future matches is uncertain and depends on various factors such as team performance, opponents, and individual form. Mbappé's participation and goal-scoring in the 2026 World Cup will depend on his health, team selection, and performance during the tournament.",
-  "6": "Brazil are perennial World Cup contenders with a talented squad built around Vinicius Jr, Rodrygo and Endrick. Their attacking depth and technical quality make them one of the favourites, though their recent defensive record and Copa America exits raise some questions.",
-  "7": "Kylian Mbappé is known for his explosive style of play which can sometimes draw fouls and risk disciplinary action. However, he has generally maintained good discipline throughout his career. A red card would require either a serious foul or two bookable offences — possible but unlikely given his experience at this level.",
   "8": "Cristiano Ronaldo winning the World Cup with Portugal would be the crowning achievement of his career. Portugal have a talented squad but face stiff competition from Brazil, France and Argentina. Ronaldo's individual brilliance alone is unlikely to carry a team all the way to the title.",
-  "9": "Marcus Rashford has been a regular feature in England squads but his recent club form has been inconsistent. Gareth Southgate's successors will need to evaluate his performance carefully. Given England's depth in attacking positions, his inclusion is plausible but not guaranteed.",
-  "16": "The question is about Paul Pogba's participation in the 2026 World Cup. As a French player, his national team's chances and his own form will be crucial in determining his selection. Pogba has been a regular starter for France in the past, but his current form and potential injuries could impact his selection.",
-  "24": "Cristiano Ronaldo is a key player for Portugal, and his injury history is a concern. Given his age and intense training, there's a possibility of injury. However, it's difficult to predict with certainty. Historical data shows that experienced players like Ronaldo often take precautions to avoid injuries, but the physical demands of the World Cup can be high.",
-  "2_country": "pt",
-  "3_country": "ar",
-  "4_country": "br",
-  "5_country": "fr",
-  "6_country": "br",
-  "7_country": "fr",
-  "8_country": "pt",
-  "9_country": "gb-eng",
-  "16_country": "fr",
-  "24_country": "pt",
+  "28": "Lionel Messi is a skilled player known for his exceptional ball control and scoring abilities. However, predicting whether he will score from a corner kick is uncertain and subject to various factors, including the opponent's defense, the game's situation, and Messi's performance on the day. Messi plays for Argentina (ar).",
   "__hiddenMarkets": {
     "1": {
       "hiddenAt": "2026-05-29T20:11:56.304Z",
@@ -29,6 +12,60 @@
       "createdAt": 1779855508,
       "resolveBy": 1779941893
     },
+    "2": {
+      "hiddenAt": "2026-05-30T06:24:40.279Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Cristiano Ronaldo play in the 2026 World Cup?",
+      "createdAt": 1779858226,
+      "resolveBy": 1779944611
+    },
+    "3": {
+      "hiddenAt": "2026-05-30T06:24:40.283Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Lionel Messi play in the 2026 World Cup?",
+      "createdAt": 1779874148,
+      "resolveBy": 1779960531
+    },
+    "4": {
+      "hiddenAt": "2026-05-30T06:24:40.284Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Neymar suffer an injury during the 2026 World Cup?",
+      "createdAt": 1779875557,
+      "resolveBy": 1779961940
+    },
+    "6": {
+      "hiddenAt": "2026-05-30T06:24:40.285Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Brazil win the 2026 FIFA World Cup?",
+      "createdAt": 1779972387,
+      "resolveBy": 1780058785
+    },
+    "7": {
+      "hiddenAt": "2026-05-30T06:24:40.287Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Kylian Mbappé receive a red card in the 2026 World Cup?",
+      "createdAt": 1779973487,
+      "resolveBy": 1780059885
+    },
+    "9": {
+      "hiddenAt": "2026-05-30T06:24:40.288Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Marcus Rashford play for England in the 2026 World Cup?",
+      "createdAt": 1779982147,
+      "resolveBy": 1780068544
+    },
     "10": {
       "hiddenAt": "2026-05-29T20:03:53.270Z",
       "reason": "expired_with_zero_bets",
@@ -37,6 +74,141 @@
       "question": "Will Argentina win the 2026 World Cup?",
       "createdAt": 1779995135,
       "resolveBy": 1780081532
+    },
+    "11": {
+      "hiddenAt": "2026-05-30T06:24:40.289Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Mohamed Salah play in the 2026 World Cup?",
+      "createdAt": 1780003423,
+      "resolveBy": 1780089820
+    },
+    "13": {
+      "hiddenAt": "2026-05-30T06:24:40.290Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Lionel Messi suffer an injury during the 2026 World Cup?",
+      "createdAt": 1780005245,
+      "resolveBy": 1780091643
+    },
+    "14": {
+      "hiddenAt": "2026-05-30T00:25:40.762Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Marcus Rashford score against Argentina in the 2026 FIFA World Cup?",
+      "createdAt": 1780008710,
+      "resolveBy": 1780095106
+    },
+    "15": {
+      "hiddenAt": "2026-05-30T00:25:40.765Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Which team will win the 2026 FIFA World Cup?",
+      "createdAt": 1780008874,
+      "resolveBy": 1780095271
+    },
+    "16": {
+      "hiddenAt": "2026-05-30T05:44:57.049Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Paul Pogba play for France in the 2026 World Cup?",
+      "createdAt": 1780028636,
+      "resolveBy": 1780115014
+    },
+    "17": {
+      "hiddenAt": "2026-05-30T05:44:57.053Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Lionel Messi receive a yellow card in the 2026 World Cup?",
+      "createdAt": 1780029202,
+      "resolveBy": 1780115599
+    },
+    "18": {
+      "hiddenAt": "2026-05-30T05:44:57.054Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "What are the odds of Portugal winning the 2026 World Cup?",
+      "createdAt": 1780030141,
+      "resolveBy": 1780116539
+    },
+    "19": {
+      "hiddenAt": "2026-05-30T05:44:57.054Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Cristiano Ronaldo receive a red card in the 2026 World Cup?",
+      "createdAt": 1780030715,
+      "resolveBy": 1780117113
+    },
+    "20": {
+      "hiddenAt": "2026-05-30T05:44:57.055Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Neymar be benched at any point during the 2026 World Cup?",
+      "createdAt": 1780031086,
+      "resolveBy": 1780117483
+    },
+    "21": {
+      "hiddenAt": "2026-05-30T05:44:57.056Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "What are the chances of Spain winning the 2026 World Cup?",
+      "createdAt": 1780031385,
+      "resolveBy": 1780117782
+    },
+    "22": {
+      "hiddenAt": "2026-05-30T05:44:57.057Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Egypt win the 2026 World Cup?",
+      "createdAt": 1780031526,
+      "resolveBy": 1780117923
+    },
+    "23": {
+      "hiddenAt": "2026-05-30T05:44:57.058Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Lionel Messi receive a yellow card in his first match of the 2026 World Cup?",
+      "createdAt": 1780032136,
+      "resolveBy": 1780118533
+    },
+    "24": {
+      "hiddenAt": "2026-05-30T05:44:57.058Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Cristiano Ronaldo get injured in his first match of the 2026 World Cup?",
+      "createdAt": 1780032259,
+      "resolveBy": 1780118638
+    },
+    "25": {
+      "hiddenAt": "2026-05-30T06:18:05.651Z",
+      "reason": "closed_with_zero_bets",
+      "txHash": null,
+      "error": null,
+      "question": "Will Marcus Rashford score against Portugal in the 2026 World Cup?",
+      "createdAt": 1780035242,
+      "resolveBy": 1780121640
+    }
+  },
+  "5_country": "fr",
+  "8_country": "pt",
+  "28_country": "ar",
+  "__dailyMarketCreations": {
+    "0x4070e534b84cc01e62a685c96d165deedac39f58": {
+      "date": "2026-05-30",
+      "createdAt": "2026-05-30T06:32:28.104Z"
     }
   }
 }

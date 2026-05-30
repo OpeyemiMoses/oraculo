@@ -42,8 +42,9 @@ export default function Navbar() {
   const [detectedWallets, setDetectedWallets] = useState([]);
   const [menuOpen, setMenuOpen]               = useState(false);
   const [toast, setToast]                     = useState(null);
-  const dropdownRef  = useRef(null);
-  const menuRef      = useRef(null);
+  const dropdownRef   = useRef(null);
+  const menuRef       = useRef(null);
+  const hamburgerRef  = useRef(null);
   const prevConnected = useRef(false);
 
   const nav = [
@@ -52,6 +53,7 @@ export default function Navbar() {
     { path: "/leaderboard", label: "Open Markets" },
     { path: "/how",         label: "How It Works" },
     { path: "/wallet",      label: "Wallet" },
+    { path: "/profile",     label: "Profile" }
   ];
 
   const short = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
@@ -80,10 +82,25 @@ function connectWallet(wallet) {
   useEffect(() => {
     function handleClickOutside(e) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false);
-      if (menuRef.current    && !menuRef.current.contains(e.target))      setMenuOpen(false);
+      // Exclude the hamburger button itself — it has its own toggle handler
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target) &&
+        hamburgerRef.current &&
+        !hamburgerRef.current.contains(e.target)
+      ) {
+        setMenuOpen(false);
+      }
+    }
+    function handleResize() {
+      if (window.innerWidth > 768) setMenuOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
@@ -170,7 +187,7 @@ function connectWallet(wallet) {
 
             <NetworkSwitcher />
 
-            <button className="hamburger" onClick={() => setMenuOpen(prev => !prev)} style={{
+            <button ref={hamburgerRef} className="hamburger" onClick={() => setMenuOpen(prev => !prev)} style={{
               display: "none", background: "transparent", border: "1px solid #2a2a2a",
               borderRadius: 8, padding: "7px 10px", cursor: "pointer", color: "#c0c0c0", fontSize: 18, lineHeight: 1,
             }}>

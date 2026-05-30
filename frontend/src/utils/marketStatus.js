@@ -73,7 +73,7 @@ export function getMarketDisplay(market) {
     isSoloBetExpired,
     hasOnlyWithBets,
     hasOnlyAgainstBets,
-    isLiveListItem: isOpen && !isEmptyExpired,
+    isLiveListItem: isOpen && !isEmptyExpired && !isSoloBetExpired,
     isActiveBettable: isOpen && !isExpiredOpen,
     statusLabel,
     statusClass,

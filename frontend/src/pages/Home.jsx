@@ -77,7 +77,7 @@ export default function Home() {
   const [stats, setStats] = useState({ total: 0, open: 0, pool: "0" });
   const [toast, setToast] = useState(null);
   const navigate = useNavigate();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
 
   function showToast(message, type = "info") {
     setToast({ message, type });
@@ -90,7 +90,7 @@ useEffect(() => {
     const all = d.markets || [];
 const liveMarkets = all.filter(m => getMarketDisplay(m).isLiveListItem);
 const activeOpen = all.filter(m => getMarketDisplay(m).isActiveBettable);
-const pool = all.reduce((acc, m) => acc + getMarketPool(m), 0);
+const pool = liveMarkets.reduce((acc, m) => acc + getMarketPool(m), 0);
 
 setMarkets(liveMarkets.slice(0, 6));
 setAllMarkets(all); // keep all markets for duplicate checking
@@ -153,9 +153,15 @@ setStats({
           confidencePct:   result.confidencePct,
           analysis:        result.analysis,
           detectedCountry: result.detectedCountry,
+          walletAddress:   address || null,
         }),
       });
       const data = await res.json();
+      if (res.status === 429 || data.error === "daily_limit") {
+        showToast(data.message || "You've already created a market today. Come back tomorrow!", "error");
+        setCreating(false);
+        return;
+      }
       if (data.success && data.market) {
        console.log("CREATE MARKET RESPONSE:", JSON.stringify(data));
 setResult(prev => ({ ...prev, market: data.market, explorerUrl: data.explorerUrl, marketCreated: true }));

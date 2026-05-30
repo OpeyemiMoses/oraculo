@@ -36,6 +36,25 @@ function saveStorage(data) {
 
 let marketAnalysis = loadStorage();
 
+// ─── Daily Market Creation Limit ──────────────────────────────────────────────
+
+const DAILY_LIMIT_KEY = "__dailyMarketCreations";
+
+function todayUTC() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function hasCreatedMarketToday(walletAddress) {
+  const record = marketAnalysis[DAILY_LIMIT_KEY] || {};
+  const entry = record[walletAddress.toLowerCase()];
+  return entry?.date === todayUTC();
+}
+
+function recordMarketCreation(walletAddress) {
+  if (!marketAnalysis[DAILY_LIMIT_KEY]) marketAnalysis[DAILY_LIMIT_KEY] = {};
+  marketAnalysis[DAILY_LIMIT_KEY][walletAddress.toLowerCase()] = { date: todayUTC(), createdAt: new Date().toISOString() };
+  saveStorage(marketAnalysis);
+}
 
 const HIDDEN_MARKETS_KEY = "__hiddenMarkets";
 
@@ -77,7 +96,67 @@ function isExpiredNoBetMarket(market, now = Math.floor(Date.now() / 1000)) {
 }
 
 function isClosedNoBetMarket(market) {
-  return ["Resolved", "Cancelled"].includes(market.status) && getTotalPool(market) === 0;
+  if (!["Resolved", "Cancelled"].includes(market.status)) return false;
+  if (getTotalPool(market) === 0) return true;
+  // Also hide resolved/cancelled markets that were one-sided (solo bettor)
+  const poolWith = parseFloat(market.poolWith || 0);
+  const poolAgainst = parseFloat(market.poolAgainst || 0);
+  return poolWith === 0 || poolAgainst === 0;
+}
+
+// ─── Solo-bet detection ───────────────────────────────────────────────────────
+// A solo-bet market: timer expired, one side has bets, the other has 0.
+// The solo bettor gets refunded via cancelMarket on-chain.
+
+function isSoloBetExpiredMarket(market, now = Math.floor(Date.now() / 1000)) {
+  if (market.status !== "Open") return false;
+  const resolveBy = Number(market.resolveBy || 0);
+  const timerExpired =
+    (resolveBy > 0 && now >= resolveBy) ||
+    (Number(market.createdAt || 0) > 0 && (now - Number(market.createdAt)) >= MARKET_MATURITY_S);
+  if (!timerExpired) return false;
+  const poolWith = parseFloat(market.poolWith || 0);
+  const poolAgainst = parseFloat(market.poolAgainst || 0);
+  const pool = poolWith + poolAgainst;
+  return pool > 0 && (poolAgainst === 0 || poolWith === 0);
+}
+
+// ─── Prune stale hidden market entries ───────────────────────────────────────
+
+function pruneOrphanedKeys() {
+  const hidden = getHiddenMarkets();
+  const hiddenIds = new Set(Object.keys(hidden));
+  const special = new Set([HIDDEN_MARKETS_KEY, DAILY_LIMIT_KEY]);
+  let pruned = 0;
+  for (const key of Object.keys(marketAnalysis)) {
+    if (special.has(key)) continue;
+    const baseId = key.split("_")[0];
+    // Only delete if the base market ID is in hidden markets
+    if (!hiddenIds.has(baseId)) continue;
+    delete marketAnalysis[key];
+    pruned++;
+  }
+  if (pruned > 0) {
+    saveStorage(marketAnalysis);
+    console.log(`[Cleanup] Pruned ${pruned} orphaned metadata keys for hidden markets.`);
+  }
+}
+
+function pruneOldHiddenMarkets(daysOld = 30) {
+  const hidden = getHiddenMarkets();
+  const cutoff = Date.now() - daysOld * 24 * 60 * 60 * 1000;
+  let pruned = 0;
+  for (const [id, entry] of Object.entries(hidden)) {
+    if (entry.hiddenAt && new Date(entry.hiddenAt).getTime() < cutoff) {
+      delete hidden[id];
+      pruned++;
+    }
+  }
+  if (pruned > 0) {
+    marketAnalysis[HIDDEN_MARKETS_KEY] = hidden;
+    saveStorage(marketAnalysis);
+    console.log(`[Cleanup] Pruned ${pruned} stale hidden market entries older than ${daysOld} days.`);
+  }
 }
 
 async function hideNoBetMarkets(markets, log = () => {}) {
@@ -90,6 +169,20 @@ async function hideNoBetMarkets(markets, log = () => {}) {
     if (isClosedNoBetMarket(market)) {
       saveHiddenMarket(market, "closed_with_zero_bets");
       log(`Market #${market.id} — hidden because it is already closed with $0 in bets.`);
+      hidden.push(String(market.id));
+      continue;
+    }
+
+    // Solo-bet expired: cancel on-chain so the lone bettor gets refunded
+    if (isSoloBetExpiredMarket(market, now)) {
+      const result = await cancelMarket(market.id);
+      if (result.success) {
+        saveHiddenMarket(market, "solo_bet_expired", result.txHash);
+        log(`Market #${market.id} — cancelled and hidden: timer ended with only one side betting. Bettor refunded. Tx: ${result.txHash}`);
+      } else {
+        saveHiddenMarket(market, "solo_bet_expired_cancel_failed", null, result.error);
+        log(`Market #${market.id} — hidden: timer ended with only one side betting. Cancel failed: ${result.error}`);
+      }
       hidden.push(String(market.id));
       continue;
     }
@@ -178,89 +271,49 @@ const FALLBACK_LEAGUES = [
 ];
 
 const KNOWN_PLAYERS = [
-  // France
   "Mbappe", "Mbappé", "Griezmann", "Thuram", "Camavinga", "Tchouameni", "Maignan", "Saliba", "Dembele", "Kante", "Kanté",
-  // Argentina
   "Messi", "Di Maria", "Dybala", "Lautaro", "Mac Allister", "De Paul", "Molina", "Acuña",
-  // Portugal
   "Ronaldo", "Bernardo Silva", "Joao Felix", "Diogo Jota", "Cancelo", "Leao", "Bruno Fernandes", "Vitinha", "Ruben Dias",
-  // England
   "Kane", "Bellingham", "Saka", "Rashford", "Foden", "Rice", "Grealish", "Trippier", "Pickford",
-  // Germany
   "Musiala", "Wirtz", "Havertz", "Kimmich", "Kroos", "Gundogan", "Gündogan", "Rudiger", "Rüdiger", "Neuer",
-  // Spain
   "Pedri", "Gavi", "Yamal", "Lamine", "Morata", "Olmo", "Rodri", "Laporte",
-  // Brazil
   "Neymar", "Vinicius", "Vini Jr", "Rodrygo", "Raphinha", "Richarlison", "Casemiro", "Endrick", "Alisson", "Marquinhos",
-  // Netherlands
   "Van Dijk", "De Jong", "Gakpo", "Depay", "Dumfries", "Frimpong",
-  // Belgium
   "De Bruyne", "Lukaku", "Tielemans", "Doku",
-  // Croatia
   "Modric", "Modrić", "Gvardiol", "Brozovic", "Kramaric",
-  // Morocco
   "Hakimi", "Ziyech", "Amrabat", "En-Nesyri", "Ounahi", "Mazraoui",
-  // Senegal
   "Mane", "Mané", "Koulibaly", "Ismaila Sarr", "Gueye",
-  // Egypt
   "Salah", "Mo Salah", "Marmoush",
-  // Algeria
   "Mahrez", "Bennacer", "Aouar",
-  // Ivory Coast
   "Zaha", "Kessie", "Haller",
-  // Ghana
   "Kudus", "Partey", "Ayew",
-  // Japan
   "Mitoma", "Kubo", "Endo", "Kamada", "Tomiyasu",
-  // South Korea
   "Son", "Son Heung-min", "Kim Min-Jae", "Lee Kang-In",
-  // Norway
   "Haaland", "Odegaard", "Ødegaard", "Isak", "Sorloth",
-  // Colombia
   "James", "Luis Diaz", "Falcao", "Cuadrado",
-  // Uruguay
   "Valverde", "Darwin Nunez", "Cavani", "Suarez", "Bentancur",
-  // Ecuador
   "Enner Valencia", "Plata",
-  // Paraguay
   "Almiron", "Almirón", "Sanabria",
-  // Turkey
   "Calhanoglu", "Çalhanoğlu", "Guler", "Güler", "Yildiz",
-  // Austria
   "Alaba", "Sabitzer", "Arnautovic",
-  // Switzerland
   "Xhaka", "Shaqiri", "Akanji", "Embolo",
-  // Sweden
-  "Forsberg",
-  // Bosnia
-  "Dzeko", "Džeko", "Pjanic", "Pjanić",
-  // Scotland
+  "Forsberg", "Dzeko", "Džeko", "Pjanic", "Pjanić",
   "Robertson", "McTominay", "Adams",
-  // Iran
   "Taremi", "Azmoun", "Jahanbakhsh",
-  // Curaçao
   "Kluivert",
 ];
 
-// ── 2026 FIFA World Cup Qualified Teams ─────────────────────────────────────
 const KNOWN_TEAMS = [
-  // Hosts
   "United States", "USA", "Canada", "Mexico",
-  // CAF
   "Algeria", "Cape Verde", "Ivory Coast", "Egypt", "Ghana",
   "Morocco", "Senegal", "South Africa", "Tunisia", "DR Congo",
-  // AFC
   "Australia", "Iran", "Japan", "Jordan", "South Korea",
   "Qatar", "Saudi Arabia", "Uzbekistan", "Iraq",
-  // UEFA
   "Austria", "Belgium", "Bosnia and Herzegovina", "Croatia",
   "Czech Republic", "England", "France", "Germany", "Netherlands",
   "Norway", "Portugal", "Scotland", "Spain", "Sweden", "Switzerland", "Turkey",
-  // CONCACAF
   "Curaçao", "Curacao", "Haiti", "Panama",
-  // CONMEBOL
   "Argentina", "Brazil", "Colombia", "Ecuador", "Paraguay", "Uruguay",
-  // OFC
   "New Zealand",
 ];
 
@@ -295,7 +348,6 @@ function extractPlayerStats(player) {
 }
 
 async function getPlayerStats(playerName) {
-  // 1. Try WC 2026
   try {
     const res = await axios.get(`${FOOTBALL_API_BASE}/players`, {
       headers: FOOTBALL_HEADERS,
@@ -308,7 +360,6 @@ async function getPlayerStats(playerName) {
     }
   } catch {}
 
-  // 2. Walk back through seasons × leagues
   for (const season of FALLBACK_SEASONS) {
     if (season !== WC_SEASON) {
       try {
@@ -479,7 +530,6 @@ No markdown, no extra text.`,
     } catch {}
   }
 
-  // Final fallback: confidence score
   const confidence = Number(confidencePct) || 50;
   const agentCorrect = confidence >= 60;
   return {
@@ -493,8 +543,8 @@ No markdown, no extra text.`,
 
 // ─── Scheduler State ──────────────────────────────────────────────────────────
 
-const SCHEDULER_INTERVAL_MS = 60 * 60 * 1000; // every 1 hour
-const MARKET_MATURITY_S     = 60 * 60 * 24;   // 24 hours in seconds
+const SCHEDULER_INTERVAL_MS = 60 * 60 * 1000;
+const MARKET_MATURITY_S     = 60 * 60 * 24;
 let schedulerRunning = false;
 let lastSchedulerRun = null;
 let lastSchedulerLog = [];
@@ -515,6 +565,10 @@ async function runScheduler() {
   };
 
   try {
+    // Prune stale hidden market entries older than 30 days
+    pruneOldHiddenMarkets(30);
+    pruneOrphanedKeys();
+
     log("Checking open markets...");
     const markets = await getAllMarkets();
     const hidden = await hideNoBetMarkets(markets, log);
@@ -533,6 +587,8 @@ async function runScheduler() {
 
     for (const market of ready) {
       const totalPool = getTotalPool(market);
+
+      // Skip solo-bet markets — already handled by hideNoBetMarkets above
       if (totalPool === 0) {
         saveHiddenMarket(market, "expired_with_zero_bets");
         log(`Market #${market.id} — closed and hidden because timer ended with $0 in bets.`);
@@ -549,7 +605,6 @@ async function runScheduler() {
 
       if (result.success) {
         log(`Market #${market.id} — Resolved on-chain. Tx: ${result.txHash}. Winners: "${agentCorrect ? "With" : "Against"}"`);
-        // Store resolution metadata
         marketAnalysis[`${market.id}_resolved`] = {
           resolvedAt: new Date().toISOString(),
           agentCorrect,
@@ -562,7 +617,6 @@ async function runScheduler() {
         log(`Market #${market.id} — Resolution failed: ${result.error}`);
       }
 
-      // Pause between markets to respect rate limits
       await new Promise(r => setTimeout(r, 3000));
     }
 
@@ -610,7 +664,6 @@ app.post("/scheduler/run", async (req, res) => {
     return res.status(401).json({ error: "Unauthorized" });
   }
   res.json({ success: true, message: "Scheduler triggered manually. Check /scheduler/status for progress." });
-  // Fire without awaiting so the response returns immediately
   runScheduler();
 });
 
@@ -623,7 +676,6 @@ app.post("/ask", async (req, res) => {
   try {
     const agentResult = await askAgent(question);
 
-    // ── PARTICIPATION_CHECK: factual roster question — never create a market ──
     if (agentResult.type === "PARTICIPATION_CHECK") {
       return res.json({
         success:         true,
@@ -685,8 +737,17 @@ app.post("/ask", async (req, res) => {
 // ─── Create Market ────────────────────────────────────────────────────────────
 
 app.post("/create-market", async (req, res) => {
-  const { question, confidencePct, resolveBy, analysis, detectedCountry } = req.body;
+  const { question, confidencePct, resolveBy, analysis, detectedCountry, walletAddress } = req.body;
   if (!question || !confidencePct) return res.status(400).json({ error: "Missing fields" });
+
+  if (walletAddress) {
+    if (hasCreatedMarketToday(walletAddress)) {
+      return res.status(429).json({
+        error: "daily_limit",
+        message: "You've already created a market today. Come back tomorrow!",
+      });
+    }
+  }
 
   try {
     const marketResult = await createMarket(question, confidencePct, resolveBy || null);
@@ -696,6 +757,7 @@ app.post("/create-market", async (req, res) => {
       market = await getMarket(marketResult.marketId);
       if (analysis) { marketAnalysis[marketResult.marketId] = analysis; saveStorage(marketAnalysis); }
       if (detectedCountry) { marketAnalysis[`${marketResult.marketId}_country`] = detectedCountry; saveStorage(marketAnalysis); }
+      if (walletAddress) recordMarketCreation(walletAddress);
     }
 
     const enrichedMarket = market ? {
@@ -798,12 +860,9 @@ app.get("/user/:address/balance", async (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Oráculo API running on port ${PORT}`);
-
-  // Kick off the scheduler — first run after 5 min, then every hour
   setTimeout(() => {
     runScheduler();
     setInterval(runScheduler, SCHEDULER_INTERVAL_MS);
   }, 5 * 60 * 1000);
-
   console.log(`[Scheduler] Auto-resolution active — checking markets every ${SCHEDULER_INTERVAL_MS / 1000 / 3600}h (first run in 5 min)`);
 });

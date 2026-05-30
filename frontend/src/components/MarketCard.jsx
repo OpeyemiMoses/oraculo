@@ -260,6 +260,22 @@ export default function MarketCard({ market }) {
           )}
         </div>
       </div>
+
+      {/* AI Decision Reason */}
+      {market.resolution?.reason && (
+        <div style={{
+          position: "relative", zIndex: 1,
+          borderTop: "1px solid #1a1a1a",
+          paddingTop: 10, marginTop: 2,
+        }}>
+          <span className="label" style={{ display: "block", marginBottom: 4 }}>
+            🤖 AI Decision · {market.resolution.dataSource || ""}
+          </span>
+          <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5, margin: 0 }}>
+            {market.resolution.reason}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
